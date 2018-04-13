@@ -935,7 +935,7 @@ int main (int argc, char** argv)
     ch_opt_addSU (CH_OPTION_REQUIRED, 'i', "interface",         "Interface(s) to listen on",                        &options.interfaces);
     ch_opt_addSU (CH_OPTION_REQUIRED, 'o', "output",            "Destination(s) to write to",                       &options.dests);
     ch_opt_addsu (CH_OPTION_REQUIRED, 'c', "cpus",              "CPUs in the form m:l,l,l:w,w,w",                   &options.cpus_str);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 's', "sanplen",           "Maximum capture length",                           &options.snaplen, 2048);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 's', "snaplen",           "Maximum capture length",                           &options.snaplen, 2048);
     ch_opt_addbi (CH_OPTION_FLAG,     'n', "no-promisc",        "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'k', "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",           "Maximum file size (<=0 means no max)",             &options.max_file, -1);
