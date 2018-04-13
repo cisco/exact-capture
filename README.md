@@ -1,4 +1,4 @@
-# Exact Capture Ver 1.0
+# Exact Capture
 ## Lossless Packet Capture for ExaNICs
 
 Exact Capture is a high-rate, lossless packet capture solution for ExaNIC network adapters. 
