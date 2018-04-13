@@ -43,7 +43,7 @@
 
 #define EXACT_MAJOR_VER 1
 #define EXACT_MINOR_VER 0
-#define EXACT_VER_TEXT "RC"
+#define EXACT_VER_TEXT ""
 
 
 /* Logger settings */
