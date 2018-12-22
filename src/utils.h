@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <chaste/utils/util.h>
+#include "data_structs/timespecps.h"
 
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #  define htonll(x) __bswap_64(x)
@@ -42,5 +43,14 @@ int max_digitsf (double a, double b, double c, double d, double e, double f,
                  double g, double h,  double i, double j);
 int max_digitsll (int64_t a, int64_t b, int64_t c, int64_t d, int64_t e,
                   int64_t f, int64_t g, int64_t h, int64_t i, int64_t j);
+
+
+
+#define PS_IN_SECS (1000LL*1000*1000*1000)
+timespecps_t sub_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs);
+timespecps_t add_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs);
+timespecps_t sub_tsps_ps(timespecps_t* lhs, int64_t ps);
+timespecps_t add_tsps_ps(timespecps_t* lhs, int64_t ps);
+double tsps_to_double_ns(timespecps_t* lhs);
 
 #endif /* SRC_UTILS_H_ */

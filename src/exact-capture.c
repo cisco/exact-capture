@@ -103,6 +103,7 @@ static struct
     ch_bool no_log_ts;
     ch_bool no_kernel;
     ch_bool no_promisc;
+    ch_bool clear_buff;
     ch_word verbosity;
     bool no_overflow_warn;
     bool debug_log;
@@ -768,6 +769,7 @@ static CH_VECTOR(pthread)* start_listener_threads(cpu_set_t listener_cpus)
         lparams->ltid           = lthreads->count;
         lparams->promisc        = !options.no_promisc;
         lparams->kernel_bypass  = options.no_kernel;
+        lparams->clear_buff     = options.clear_buff;
 
         if(parse_device(lparams->interface, lparams->exanic_dev,
                         &lparams->exanic_dev_num, &lparams->exanic_port))
@@ -948,6 +950,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,     'w', "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'S', "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'p', "perf-test",         "Performance test mode [0-7]",                      &options.calib_mode, 0);
+    ch_opt_addbi (CH_OPTION_FLAG,     'C', "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
 
     ch_opt_parse (argc, argv);
 

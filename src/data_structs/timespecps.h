@@ -15,8 +15,8 @@
 #include <stdint.h>
 
 typedef struct timespecps {
-    uint64_t tv_sec;
-    uint64_t tv_psec;
+    int64_t tv_sec;
+    int64_t tv_psec;
 } __attribute__((packed)) timespecps_t;
 
 

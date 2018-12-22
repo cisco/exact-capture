@@ -392,7 +392,7 @@ static inline eio_error_t eio_bring_server_connect(eio_stream_t* this)
     }
 
     //Map the file into memory
-    void* mem = mmap( NULL, total_mem_req, PROT_READ | PROT_WRITE, MAP_SHARED , bring_fd, 0);
+    void* mem = mmap( NULL, total_mem_req, PROT_READ | PROT_WRITE, MAP_SHARED, bring_fd, 0);
     if(mem == MAP_FAILED){
         ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
         result = EIO_EINVALID;
@@ -487,6 +487,8 @@ static inline eio_error_t eio_bring_server_connect(eio_stream_t* this)
     }
     ch_log_debug1("Waiting for client to connect to bring %s...Done\n", priv->name);
 
+
+
     priv->closed = 0;
     result = EIO_ENONE;
     return result;
@@ -506,6 +508,31 @@ static eio_error_t eio_bring_client_connect(eio_stream_t* this)
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
 
+    //Calculate the amount of memory we will need
+    //Each slot has a requested size, plus some header
+    const int64_t mem_per_slot      = priv->slot_size + sizeof(bring_slot_header_t);
+    //Round up each slot so that it's a multiple of 64bits.
+    const int64_t slot_aligned_size = round_up(mem_per_slot, getpagesize());
+    //Figure out the total memory commitment for slots
+    const int64_t mem_per_ring      = slot_aligned_size * priv->slot_count;
+    //Allocate for both server-->client and client-->server connections
+    const int64_t total_ring_mem    = mem_per_ring * 2;
+    //Include the memory required for the headers -- Make sure there's a place for the synchronization pointer
+    const int64_t header_mem        = round_up(sizeof(bring_header_t),getpagesize());
+    //All memory required
+    const int64_t total_mem_req     = total_ring_mem + header_mem;
+
+    ch_log_debug1("Client calculated memory requirements\n");
+    ch_log_debug1("-------------------------\n");
+    ch_log_debug1("mem_per_slot   %li\n",   mem_per_slot);
+    ch_log_debug1("slot_sligned   %li\n",   slot_aligned_size);
+    ch_log_debug1("mem_per_ring   %li\n",   mem_per_ring);
+    ch_log_debug1("total_ring_mem %li\n",   total_ring_mem);
+    ch_log_debug1("header_mem     %li\n",   header_mem);
+    ch_log_debug1("total_mem_req  %li\n",   total_mem_req);
+    ch_log_debug1("-------------------------\n");
+
+
     //Now there is a bring file and it should have a header in it
     int bring_fd = shm_open(priv->name, O_RDWR, (mode_t)(0666));
     if(bring_fd < 0){
@@ -515,74 +542,74 @@ static eio_error_t eio_bring_client_connect(eio_stream_t* this)
     }
 
     ch_log_debug1("Doing bring connect client on %s\n",   priv->name);
+//
+//    //Resize the file big enough to read the bring header only
+//    if(ftruncate(bring_fd,sizeof(bring_header_t))){
+//        ch_log_error( "Could not resize shared region \"%s\" to size=%li. Error=%s\n",
+//                priv->name,
+//                sizeof(bring_header_t),
+//                strerror(errno)
+//        );
+//        result = EIO_EINVALID;
+//        goto error_close_file;
+//    }
+//
+//    //Map the file into memory
+//    void* mem_tmp = mmap( NULL, sizeof(bring_header_t), PROT_READ, MAP_SHARED, bring_fd, 0);
+//    if(mem_tmp == MAP_FAILED){
+//        ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
+//        result = EIO_EINVALID;
+//        goto  error_close_file;
+//    }
+//
+//    //Memory must be page aligned otherwise we're in trouble (TODO - could pass alignment though the file and check..)
+//    //ch_log_debug3("memory mapped at address =%p\n",   mem);
+//    if( ((uint64_t)mem_tmp) != (((uint64_t)mem_tmp) & ~0xFFF)){
+//        ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
+//        result = EIO_EINVALID;
+//        goto  error_close_file;
+//    }
+//
+//    //This is a sort of nasty atomic access. Which doesn't leave crap lying around like POSIX semaphores do
+//    ch_log_debug1("Looking for bring header on %s\n", priv->name);
+//    bring_header_t* header_tmp_ptr = mem_tmp;
+//    __sync_synchronize();
+//    while(header_tmp_ptr->magic != BRING_MAGIC_SERVER){
+//        __sync_synchronize();
+//        usleep(100 * 1000);
+//    }
+//    ch_log_debug1("Looking for bring header... Done.\n");
+//
+//    bring_header_t header_tmp = *(bring_header_t*)(mem_tmp);
+////    ch_log_debug1("Got bring header\n");
+////    ch_log_debug1("Client read bring memory offsets\n");
+////    ch_log_debug1("-------------------------\n");
+////    ch_log_debug1("total_mem            %016lx (%li)\n",   header_tmp.total_mem, header_tmp.total_mem);
+////    ch_log_debug1("rd_slots             %016lx (%li)\n",   header_tmp.rd_slots,  header_tmp.rd_slots);
+////    ch_log_debug1("rd_slots_size        %016lx (%li)\n",   header_tmp.rd_slots_size, header_tmp.rd_slots_size);
+////    ch_log_debug1("rd_slots_usr_size    %016lx (%li)\n",   header_tmp.rd_slot_usr_size, header_tmp.rd_slot_usr_size);
+////    ch_log_debug1("rd_mem_start_offset  %016lx (%li)\n",   header_tmp.rd_mem_start_offset, header_tmp.rd_mem_start_offset);
+////    ch_log_debug1("rd_mem_len           %016lx (%li)\n",   header_tmp.rd_mem_len, header_tmp.rd_mem_len);
+////    ch_log_debug1("wr_slots             %016lx (%li)\n",   header_tmp.wr_slots,  header_tmp.wr_slots);
+////    ch_log_debug1("wr_slots_size        %016lx (%li)\n",   header_tmp.wr_slots_size, header_tmp.wr_slots_size);
+////    ch_log_debug1("wr_slots_usr_size    %016lx (%li)\n",   header_tmp.wr_slot_usr_size, header_tmp.wr_slot_usr_size);
+////    ch_log_debug1("wr_mem_start_offset  %016lx (%li)\n",   header_tmp.wr_mem_start_offset,header_tmp.wr_mem_start_offset);
+////    ch_log_debug1("wr_mem_len           %016lx (%li)\n",   header_tmp.wr_mem_len, header_tmp.wr_mem_len);
+////    ch_log_debug1("-------------------------\n");
+//
+//    munmap(mem_tmp, sizeof(bring_header_t));//Done with the temporary mapping, do the real one now
 
-    //Resize the file big enough to read the bring header only
-    if(ftruncate(bring_fd,sizeof(bring_header_t))){
-        ch_log_error( "Could not resize shared region \"%s\" to size=%li. Error=%s\n",
-                priv->name,
-                sizeof(bring_header_t),
-                strerror(errno)
-        );
-        result = EIO_EINVALID;
-        goto error_close_file;
-    }
-
-    //Map the file into memory
-    void* mem_tmp = mmap( NULL, sizeof(bring_header_t), PROT_READ, MAP_SHARED, bring_fd, 0);
-    if(mem_tmp == MAP_FAILED){
-        ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
-        result = EIO_EINVALID;
-        goto  error_close_file;
-    }
-
-    //Memory must be page aligned otherwise we're in trouble (TODO - could pass alignment though the file and check..)
-    //ch_log_debug3("memory mapped at address =%p\n",   mem);
-    if( ((uint64_t)mem_tmp) != (((uint64_t)mem_tmp) & ~0xFFF)){
-        ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
-        result = EIO_EINVALID;
-        goto  error_close_file;
-    }
-
-    //This is a sort of nasty atomic access. Which doesn't leave crap lying around like POSIX semaphores do
-    ch_log_debug1("Looking for bring header on %s\n", priv->name);
-    bring_header_t* header_tmp_ptr = mem_tmp;
-    __sync_synchronize();
-    while(header_tmp_ptr->magic != BRING_MAGIC_SERVER){
-        __sync_synchronize();
-        usleep(100 * 1000);
-    }
-    ch_log_debug1("Looking for bring header... Done.\n");
-
-    bring_header_t header_tmp = *(bring_header_t*)(mem_tmp);
-//    ch_log_debug1("Got bring header\n");
-//    ch_log_debug1("Client read bring memory offsets\n");
-//    ch_log_debug1("-------------------------\n");
-//    ch_log_debug1("total_mem            %016lx (%li)\n",   header_tmp.total_mem, header_tmp.total_mem);
-//    ch_log_debug1("rd_slots             %016lx (%li)\n",   header_tmp.rd_slots,  header_tmp.rd_slots);
-//    ch_log_debug1("rd_slots_size        %016lx (%li)\n",   header_tmp.rd_slots_size, header_tmp.rd_slots_size);
-//    ch_log_debug1("rd_slots_usr_size    %016lx (%li)\n",   header_tmp.rd_slot_usr_size, header_tmp.rd_slot_usr_size);
-//    ch_log_debug1("rd_mem_start_offset  %016lx (%li)\n",   header_tmp.rd_mem_start_offset, header_tmp.rd_mem_start_offset);
-//    ch_log_debug1("rd_mem_len           %016lx (%li)\n",   header_tmp.rd_mem_len, header_tmp.rd_mem_len);
-//    ch_log_debug1("wr_slots             %016lx (%li)\n",   header_tmp.wr_slots,  header_tmp.wr_slots);
-//    ch_log_debug1("wr_slots_size        %016lx (%li)\n",   header_tmp.wr_slots_size, header_tmp.wr_slots_size);
-//    ch_log_debug1("wr_slots_usr_size    %016lx (%li)\n",   header_tmp.wr_slot_usr_size, header_tmp.wr_slot_usr_size);
-//    ch_log_debug1("wr_mem_start_offset  %016lx (%li)\n",   header_tmp.wr_mem_start_offset,header_tmp.wr_mem_start_offset);
-//    ch_log_debug1("wr_mem_len           %016lx (%li)\n",   header_tmp.wr_mem_len, header_tmp.wr_mem_len);
-//    ch_log_debug1("-------------------------\n");
-
-    munmap(mem_tmp, sizeof(bring_header_t));//Done with the temporary mapping, do the real one now
-
-    if(ftruncate(bring_fd,header_tmp.total_mem)){
+    if(ftruncate(bring_fd,total_mem_req)){
         ch_log_error( "Could not resize shared region \"%s\" to size=%li. Error=%s\n",
                       priv->name,
-                      header_tmp.total_mem,
+                      total_mem_req,
                       strerror(errno)
         );
         result = EIO_EINVALID;
         goto error_close_file;
     }
 
-    void* mem = mmap( NULL, header_tmp.total_mem, PROT_READ | PROT_WRITE, MAP_SHARED , bring_fd, 0);
+    void* mem = mmap( NULL, total_mem_req, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS | MAP_HUGETLB , bring_fd, 0);
     if(mem == MAP_FAILED){
         ch_log_error("Could not memory map bring file \"%s\". Error=%s\n",   priv->name, strerror(errno));
         result = EIO_EINVALID;
@@ -598,7 +625,7 @@ static eio_error_t eio_bring_client_connect(eio_stream_t* this)
     }
 
     //Pin the pages so that they don't get swapped out
-    if(mlock(mem,header_tmp.total_mem)){
+    if(mlock(mem,total_mem_req)){
         ch_log_fatal("Could not lock memory map. Error=%s\n",   strerror(errno));
         //result = EIO_EINVALID;
         //goto  error_unmap_file;
@@ -634,10 +661,10 @@ static eio_error_t eio_bring_client_connect(eio_stream_t* this)
     return EIO_ENONE;
 
 error_unlock_mem:
-    munlock(mem, header_tmp.total_mem);
+    munlock(mem, total_mem_req);
 
 //error_unmap_file:
-    munmap(mem, header_tmp.total_mem);
+    munmap(mem, total_mem_req);
 
 error_close_file:
     close(bring_fd);
@@ -667,7 +694,7 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
     //Make a local copy of the filename in case the supplied name goes away
-    const uint16_t name_len = strlen(filename); //Safety bug here? What's a reasonable max on filename size?
+    const uint16_t name_len = strnlen(filename,1024); //Safety bug here? What's a reasonable max on filename size?
     priv->name = calloc(1, name_len + 1);
     if(!priv->name){
         ch_log_debug3("Could allocate filename buffer for file \"%s\". Error=%s\n",   filename, strerror(errno));

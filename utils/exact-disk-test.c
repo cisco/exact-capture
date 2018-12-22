@@ -189,7 +189,7 @@ void new_file(buff_t* wr_buff, int file_num)
 
 void flush_to_disk(buff_t* wr_buff, int64_t* file_bytes_written, int64_t packets_written)
 {
-    //ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
+    ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
     /* Not enough space in the buffer, time to flush it */
     const uint64_t written = write(wr_buff->fd,wr_buff->data,wr_buff->offset);
     if(written < wr_buff->offset)
@@ -360,9 +360,6 @@ int main (int argc, char** argv)
     int64_t dropped_padding = 0;
     int64_t dropped_runts   = 0;
     int64_t dropped_errors  = 0;
-    int64_t dropped_errors_abrt   = 0;
-    int64_t dropped_errors_crpt   = 0;
-    int64_t dropped_errors_swofl  = 0;
 
     i64 count = 0;
     for(int i = 0; !lstop ; i++)
@@ -466,16 +463,6 @@ begin_loop:
                 (pkt_ftr->flags & EXPCAP_FLAG_CRPT) ||
                 (pkt_ftr->flags & EXPCAP_FLAG_SWOVFL)){
 
-                if(pkt_ftr->flags & EXPCAP_FLAG_ABRT)
-                    dropped_errors_abrt++;
-
-                if(pkt_ftr->flags & EXPCAP_FLAG_CRPT)
-                    dropped_errors_crpt++;
-
-                if(pkt_ftr->flags & EXPCAP_FLAG_SWOVFL)
-                    dropped_errors_swofl++;
-
-
                 dropped_errors++;
                 ch_log_debug1("Skipping over damaged packet %i (buffer %i) because flags = 0x%02x\n",
                               pkt_idx, buff_idx, pkt_ftr->flags);
@@ -576,7 +563,7 @@ begin_loop:
 
     }
 
-    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%lii (%li, %li, %li), Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_errors_abrt, dropped_errors_crpt, dropped_errors_swofl, dropped_padding);
+    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
     flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
     close(wr_buff.fd);
 
