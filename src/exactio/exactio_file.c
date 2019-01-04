@@ -98,14 +98,12 @@ static void file_destroy(eio_stream_t* this)
 
     if(priv->notify_fd){
         close(priv->notify_fd);
-    }
-
-    if(priv->filename){
-        free(priv->filename);
+        priv->notify_fd = -1;
     }
 
     if(priv->fd){
         close(priv->fd);
+        priv->fd = -1;
     }
 
     if(this->name)
@@ -144,7 +142,7 @@ static int file_open(eio_stream_t* this, bool allow_open_error)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
-    const char* filename = priv->filename;
+    const char* filename = this->name;
     priv->fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
     if(priv->fd < 0){
         if(!allow_open_error){
@@ -219,18 +217,18 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
 
         if(read_result <= 0){
             if(errno != EAGAIN && errno != EWOULDBLOCK){
-                ch_log_error("Unexpected error reading notify \"%s\". Error=%s\n", priv->filename, strerror(errno));
+                ch_log_error("Unexpected error reading notify \"%s\". Error=%s\n", this->name, strerror(errno));
                 file_destroy(this);
                 return EIO_ECLOSED;
             }
         }
         else if(read_result < (ssize_t)sizeof(notif)){
-            ch_log_error("Unexpected error, notify structure too small \"%s\". Error=%s\n", priv->filename, strerror(errno));
+            ch_log_error("Unexpected error, notify structure too small \"%s\". Error=%s\n", this->name, strerror(errno));
             file_destroy(this);
             return EIO_ECLOSED;
         }
         else if(notif.wd != priv->watch_descr){
-            ch_log_error("Unexpected error, notify watch descriptor is wrong \"%s\". Error=%s\n", priv->filename, strerror(errno));
+            ch_log_error("Unexpected error, notify watch descriptor is wrong \"%s\". Error=%s\n", this->name, strerror(errno));
             file_destroy(this);
             return EIO_ECLOSED;
         }
@@ -239,7 +237,7 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
 
             struct stat st;
             if(fstat(priv->fd,&st) < 0){
-                ch_log_error("Cannot stat file \"%s\". Error=%s\n", priv->filename, strerror(errno));
+                ch_log_error("Cannot stat file \"%s\". Error=%s\n", this->name, strerror(errno));
                 file_destroy(this);
                 return -8;
             }
@@ -302,7 +300,7 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
           return EIO_ETRYAGAIN;
         }
 
-        ch_log_error("Unexpected error reading file \"%s\". Error=%s\n", priv->filename, strerror(errno));
+        ch_log_error("Unexpected error reading file \"%s\". Error=%s\n", this->name, strerror(errno));
         file_destroy(this);
         return EIO_ECLOSED;
     }
@@ -334,11 +332,17 @@ static eio_error_t file_read_release(eio_stream_t* this, int64_t* ts)
 
 static inline eio_error_t file_read_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
@@ -425,19 +429,19 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
     ifunlikely(priv->write_max_file_size > 0 &&
                priv->total_bytes_written >= priv->write_max_file_size)
     {
+
+        ch_log_debug1("Flushing file and starting again write_max_file_size=%li, total_bytes_written=%li\n", priv->write_max_file_size, priv->total_bytes_written );
         //Rename the file with a number extension eg "myfile.17"
         priv->write_file_num++;
-        const int bufferlen = snprintf(NULL,0,"%s.%lu", priv->filename, priv->write_file_num);
+        const int bufferlen = snprintf(NULL,0,"%s.%lu", this->name, priv->write_file_num);
         char* newfilename = calloc(1,bufferlen+1);
-        sprintf(newfilename,"%s.%lu", priv->filename, priv->write_file_num);
-        free(priv->filename);
-        priv->filename = newfilename;
+        sprintf(newfilename,"%s.%lu", this->name, priv->write_file_num);
 
         //Close the old file, open a new one
         close(priv->fd);
-        priv->fd = open(priv->filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
+        priv->fd = open(newfilename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
         if(priv->fd < 0){
-            ch_log_error("Could not open file \"%s\". Error=%s\n", priv->filename, strerror(errno));
+            ch_log_error("Could not open file \"%s\". Error=%s\n", this->name, strerror(errno));
             file_destroy(this);
             return -7;
         }
@@ -459,7 +463,7 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
             ch_log_error("Only wrote %li / %li\n", result, len);
         }
         ifunlikely(result < 0){
-            ch_log_error("Unexpected error writing to file \"%s\". Error=%s\n", priv->filename, strerror(errno));
+            ch_log_error("Unexpected error writing to file \"%s\". Error=%s\n", this->name, strerror(errno));
             file_destroy(this);
             return EIO_ECLOSED;
         }
@@ -475,17 +479,28 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
 
 static inline eio_error_t file_write_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 
 static eio_error_t file_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
 {
+    (void)this;
+    (void)time;
+    (void)tsps;
+
+
     return EIO_ENOTIMPL;
 }
 
@@ -507,27 +522,17 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
     const uint64_t read_buff_size   = args->read_buff_size;
     const bool read_on_mod          = args->read_on_mod;
 
-    const uint64_t write_buff_size  = ((args->write_buff_size + getpagesize() - 1) / getpagesize() ) * getpagesize();
-    const bool write_directio       = args->write_directio;
-    const bool write_max_file_size  = args->write_max_file_size;
-
-    const char* name = args->filename;
-    this->name       = calloc(1,strnlen(name, 1024) + 1);
-    strncpy(this->name, name, 1024);
-
-
-    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    const uint64_t write_buff_size     = ((args->write_buff_size + getpagesize() - 1) / getpagesize() ) * getpagesize();
+    const bool write_directio          = args->write_directio;
+    const int64_t write_max_file_size  = args->write_max_file_size;
 
     //Make a local copy of the filename in case the supplied name goes away
-    const uint16_t name_len = strlen(filename); //Safety bug here? What's a reasonable max on filename size?
-    priv->filename = calloc(1, name_len);
-    if(!priv->filename){
-        ch_log_error("Could allocate filename buffer for file \"%s\". Error=%s\n", filename, strerror(errno));
-        file_destroy(this);
-        return -2;
-    }
-    memcpy(priv->filename, filename, name_len);
+    const char* name = args->filename;
+    const int64_t name_len = strnlen(name, 1024);
+    this->name = calloc(name_len + 1, 1);
+    memcpy(this->name, name, name_len);
 
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
     priv->read_buff_size        = read_buff_size;
     priv->write_buff_size       = write_buff_size;
@@ -540,7 +545,6 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
         file_destroy(this);
         return -3;
     }
-
 
     /* When using delegated writes, we don't need a local buffer, so make
      * allocation of the write buffer optional */

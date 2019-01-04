@@ -33,7 +33,7 @@
 #define BRING_NAME_LEN (512)
 /*Must be a multiple of disk block size. 512 * 4096 = 2MB */
 #define BRING_SLOT_SIZE (512 * DISK_BLOCK)
-#define BRING_SLOT_COUNT (128)
+#define BRING_SLOT_COUNT (64)
 
 /*Maximum number of input and output threads/cores*/
 #define MAX_WTHREADS   (64)

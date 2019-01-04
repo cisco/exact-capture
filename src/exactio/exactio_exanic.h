@@ -21,6 +21,7 @@
 #include <exanic/fifo_tx.h>
 #include <exanic/port.h>
 #include <exanic/config.h>
+#include <chaste/log/log.h>
 
 #include "exactio_timing.h"
 
@@ -193,6 +194,8 @@ static inline eio_error_t exa_read_release(eio_stream_t* this, int64_t* ts)
 
 static inline eio_error_t exa_read_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
 	return EIO_ENOTIMPL;
 }
 
@@ -200,11 +203,13 @@ static inline eio_error_t exa_read_hw_stats(eio_stream_t* this, void* stats)
 {
 	exanic_port_stats_t* port_stats = (exanic_port_stats_t*)stats;
 	exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-	exanic_get_port_stats(priv->rx_nic,
+
+	ch_log_debug1("Getting port stats on nic %s port %i\n", this->name, priv->rx_port);
+	int err = exanic_get_port_stats(priv->rx_nic,
 			priv->rx_port,
 			port_stats);
 
-	return EIO_ENONE;
+	return err;
 }
 
 

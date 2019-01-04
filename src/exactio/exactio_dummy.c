@@ -185,11 +185,18 @@ static eio_error_t dummy_read_release(eio_stream_t* this, int64_t* ts)
 
 static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void* stats)
 {
+
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
@@ -257,17 +264,27 @@ static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len, int64_t*
 
 static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void* stats)
 {
-	return EIO_ENOTIMPL;
+    (void)this;
+    (void)stats;
+
+    return EIO_ENOTIMPL;
 }
 
 
 static eio_error_t dummy_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
 {
+    (void)this;
+    (void)time;
+    (void)tsps;
+
     return EIO_ENOTIMPL;
 }
 
@@ -286,10 +303,12 @@ static eio_error_t dummy_construct(eio_stream_t* this, dummy_args_t* dummy_args)
     const uint64_t read_buff_size   = dummy_args->read_buff_size;
     const uint64_t write_buff_size  = dummy_args->write_buff_size;
     const dummy_read_mode rd_mode   = dummy_args->rd_mode;
-    const char* name                = dummy_args->name;
 
-    this->name = calloc(1,strnlen(name, 1024) + 1);
-    strncpy(this->name, name, 1024);
+    const char* name                = dummy_args->name;
+    const int64_t name_len = strnlen(name, 1024);
+    this->name = calloc(name_len + 1, 1);
+    memcpy(this->name, name, name_len);
+
 
 
 

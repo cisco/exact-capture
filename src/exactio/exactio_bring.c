@@ -43,36 +43,6 @@ typedef struct slot_header_s{
 } bring_slot_header_t;
 
 
-//_Static_assert(
-//    (sizeof(bring_slot_header_t) / sizeof(uint64_t)) * sizeof(uint64_t) == sizeof(bring_slot_header_t),
- //   "Slot header must be a multiple of 1 word for atomicity"
-//);
-//_Static_assert( sizeof(void*) == sizeof(uint64_t) , "Machine word must be 64bits");
-//_Static_assert( sizeof(bring_slot_header_t) == 4096 , "Bring slot header must be 4kB");
-
-//Header structure -- There is one of these for every
-#define BRING_MAGIC_SERVER 0xC5f7C37C69627EFLL //Any value here is good as long as it's not zero
-#define BRING_MAGIC_CLIENT ~(BRING_MAGIC_SERVER) //Any value here is good as long as it's not zero and not the same as above
-
-typedef struct bring_header {
-    volatile int64_t magic;                  //Is this memory ready yet?
-    int64_t total_mem;              //Total amount of memory needed in the mmapped region
-
-
-    int64_t rd_mem_start_offset;    //location of the memory region for reads
-    int64_t rd_mem_len;             //length of the read memory region
-    int64_t rd_slots;               //number of slots in the read region
-    int64_t rd_slots_size;          //Size of each slot including the slot header
-    int64_t rd_slot_usr_size;
-
-    int64_t wr_mem_start_offset;
-    int64_t wr_mem_len;
-    int64_t wr_slots;
-    int64_t wr_slots_size;
-    int64_t wr_slot_usr_size;
-
-} bring_header_t;
-
 //Uses integer division to round up
 #define round_up( value, nearest) ((( value + nearest -1) / nearest ) * nearest )
 #define getpagesize() sysconf(_SC_PAGESIZE)
@@ -86,7 +56,12 @@ typedef struct bring_priv {
 
     bool expand;
 
-    volatile bring_header_t* bring_head;
+    char* ring_mem;    //location of the memory region for reads
+    int64_t ring_mem_len;             //length of the read memory region
+    int64_t slots;               //number of slots in the read region
+    int64_t slots_size;          //Size of each slot including the slot header
+    int64_t slot_usr_size;
+
     //Read side variables
     char* rd_mem;          //Underlying memory to support shared mem transport
     int64_t rd_sync_counter;        //Synchronization counter to protect against loop around
@@ -122,11 +97,6 @@ static void bring_destroy(eio_stream_t* this)
         return;
     }
 
-    if(priv->bring_head){
-        munlock((void*)priv->bring_head,priv->bring_head->total_mem);
-        munmap((void*)priv->bring_head,priv->bring_head->total_mem);
-    }
-
     if(this->fd > -1){
         close(this->fd);
         this->fd = -1; //Make this reentrant safe
@@ -159,12 +129,12 @@ static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, 
         return EIO_ERELEASE;
     }
 
-    //ch_log_debug3("Doing read acquire, looking at index=%li/%li\n", priv->rd_index, priv->bring_head->rd_slots );
+    //ch_log_debug3("Doing read acquire, looking at index=%li/%li\n", priv->rd_index, priv->rd_slots );
     const bring_slot_header_t* curr_slot_head = priv->rd_head;
 
-    ifassert( (volatile int64_t)(curr_slot_head->data_size) > priv->bring_head->rd_slot_usr_size){
+    ifassert( (volatile int64_t)(curr_slot_head->data_size) > priv->slot_usr_size){
         ch_log_fatal("Data size (%li)(0x%016X) is larger than memory size (%li), corruption has happened!\n",
-                     curr_slot_head->data_size,curr_slot_head->data_size, priv->bring_head->rd_slot_usr_size);
+                     curr_slot_head->data_size,curr_slot_head->data_size, priv->slot_usr_size);
         return EIO_ETOOBIG;
     }
 
@@ -187,7 +157,7 @@ static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, 
     (void)ts;
     //eio_nowns(ts);
 
-    ch_log_debug2("Got a valid slot seq=%li (%li/%li)\n", curr_slot_head->seq_no, priv->rd_index, priv->bring_head->rd_slots);
+    ch_log_debug2("Got a valid slot seq=%li (%li/%li)\n", curr_slot_head->seq_no, priv->rd_index, priv->slots);
     *buffer = (char*)(curr_slot_head + 1);
     *len    = curr_slot_head->data_size;
 
@@ -209,14 +179,14 @@ static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
     //Do a word aligned single word write (atomic)
     (*(volatile uint64_t*)&curr_slot_head->seq_no) = 0x0ULL;
 
-    //ch_log_debug3("Done doing read release, at %p index=%li/%li, curreslot seq=%li\n", curr_slot_head, priv->rd_index, priv->bring_head->rd_slots, curr_slot_head->seq_no);
+    //ch_log_debug3("Done doing read release, at %p index=%li/%li, curreslot seq=%li\n", curr_slot_head, priv->rd_index, priv->rd_slots, curr_slot_head->seq_no);
 
     priv->reading = false;
 
     //We're done. Increment the buffer index and wrap around if necessary -- this is faster than using a modulus (%)
     priv->rd_index++;
-    priv->rd_index = priv->rd_index < priv->bring_head->rd_slots ? priv->rd_index : 0;
-    priv->rd_head = (bring_slot_header_t*)(priv->rd_mem + (priv->bring_head->rd_slots_size * priv->rd_index));
+    priv->rd_index = priv->rd_index < priv->slots ? priv->rd_index : 0;
+    priv->rd_head = (bring_slot_header_t*)(priv->rd_mem + (priv->slots_size * priv->rd_index));
     priv->rd_sync_counter++; //Assume this will never overflow. ~200 years for 1 nsec per op
 
     //Grab time stamp for this operation
@@ -227,11 +197,17 @@ static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
 
 static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
@@ -259,7 +235,7 @@ static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer,
     }
 
     //Is there a new slot ready for writing?
-    ch_log_debug3("Doing write acquire, looking at index=%li/%li %p %li\n", priv->wr_index, priv->bring_head->wr_slots, priv->wr_head, (char*)priv->wr_head - (char*)priv->bring_head );
+    ch_log_debug3("Doing write acquire, looking at index=%li/%li %p\n", priv->wr_index, priv->slots, priv->wr_head);
     const bring_slot_header_t * curr_slot_head = priv->wr_head;
 
     //ch_log_debug3("Doing write acquire, looking at %p index=%li, curreslot seq=%li\n",  hdr_mem, priv->wr_index,  curr_slot_head.seq_no);
@@ -268,7 +244,7 @@ static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer,
         return EIO_ETRYAGAIN;
     }
 
-    ifassert(*len > priv->bring_head->wr_slot_usr_size){
+    ifassert(*len > priv->slot_usr_size){
         return EIO_ETOOBIG;
     }
 
@@ -276,10 +252,10 @@ static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer,
     (void)ts;
     //eio_nowns(ts);
     *buffer = (char*)(curr_slot_head + 1);
-    *len    = priv->bring_head->wr_slot_usr_size;
+    *len    = priv->slot_usr_size;
     priv->writing = true;
 
-    ch_log_debug3(" Write acquire success - new buffer of size %li at %p (index=%li/%li)\n",   *len, *buffer, priv->wr_index, priv->bring_head->wr_slots);
+    ch_log_debug3(" Write acquire success - new buffer of size %li at %p (index=%li/%li)\n",   *len, *buffer, priv->wr_index, priv->slots);
     return EIO_ENONE;
 }
 
@@ -297,8 +273,8 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
         return EIO_EACQUIRE;
     }
 
-    ifassert(len > priv->bring_head->wr_slot_usr_size){
-        ch_log_fatal("Error: length supplied (%li) is larger than length of buffer (%li). Corruption likely. Aborting\n",  len, priv->bring_head->wr_slot_usr_size );
+    ifassert(len > priv->slot_usr_size){
+        ch_log_fatal("Error: length supplied (%li) is larger than length of buffer (%li). Corruption likely. Aborting\n",  len, priv->slot_usr_size );
         exit(-1);
     }
 
@@ -322,12 +298,12 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
     __sync_synchronize();
 
 
-    ch_log_debug2("Done doing write release, at %p index=%li/%li, curreslot seq=%li (%li)\n", curr_slot_head, priv->wr_index, priv->bring_head->wr_slots, curr_slot_head->seq_no, priv->wr_sync_counter);
+    ch_log_debug2("Done doing write release, at %p index=%li/%li, curreslot seq=%li (%li)\n", curr_slot_head, priv->wr_index, priv->slots, curr_slot_head->seq_no, priv->wr_sync_counter);
 
     //Increment and wrap around if necessary, this is faster than a modulus
     priv->wr_index++;
-    priv->wr_index = priv->wr_index < priv->bring_head->wr_slots ? priv->wr_index : 0;
-    priv->wr_head = (bring_slot_header_t*)(priv->wr_mem + (priv->bring_head->wr_slots_size * priv->wr_index));
+    priv->wr_index = priv->wr_index < priv->slots ? priv->wr_index : 0;
+    priv->wr_head = (bring_slot_header_t*)(priv->wr_mem + (priv->slots_size * priv->wr_index));
     priv->writing = false;
 
     (void)ts;
@@ -337,11 +313,17 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
 
 static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 static inline eio_error_t bring_write_hw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
@@ -364,38 +346,31 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     const int64_t mem_per_slot      = priv->slot_size + sizeof(bring_slot_header_t);
     //Round up each slot so that it's a multiple of 64bits.
     const int64_t slot_aligned_size = round_up(mem_per_slot, getpagesize());
-    //Figure out the total memory commitment for slots
-    const int64_t mem_per_ring      = slot_aligned_size * priv->slot_count;
-    //Allocate for both server-->client and client-->server connections
-    const int64_t total_ring_mem    = mem_per_ring * 2;
-    //Include the memory required for the headers -- Make sure there's a place for the synchronization pointer
-    const int64_t header_mem        = round_up(sizeof(bring_header_t),getpagesize());
-    //All memory required
-    const int64_t total_mem_req     = total_ring_mem + header_mem;
+    //Figure out the total memory commitment for the ring
+    const int64_t ring_mem_len      = slot_aligned_size * priv->slot_count;
+
 
     ch_log_debug1("Calculated memory requirements\n");
     ch_log_debug1("-------------------------\n");
-    ch_log_debug1("mem_per_slot   %li\n",   mem_per_slot);
-    ch_log_debug1("slot_aligned   %li\n",   slot_aligned_size);
-    ch_log_debug1("mem_per_ring   %li\n",   mem_per_ring);
-    ch_log_debug1("total_ring_mem %li\n",   total_ring_mem);
-    ch_log_debug1("header_mem     %li\n",   header_mem);
-    ch_log_debug1("total_mem_req  %li\n",   total_mem_req);
+    ch_log_debug1("mem_per_slot   %li     (%3.2fMB)\n",   mem_per_slot, mem_per_slot / 1024.0/ 1024.0);
+    ch_log_debug1("slot_aligned   %li     (%3.2fMB)\n",   slot_aligned_size, slot_aligned_size/ 1024.0/ 1024.0);
+    ch_log_debug1("ring_mem_len   %li     (%3.2fMB)\n",   ring_mem_len, ring_mem_len / 1024.0/ 1024.0);
+    ch_log_debug1("ring_mem_len   %li Pgs (%3.2f 2MPgs)\n",   ring_mem_len / 4096, ring_mem_len / (1024 * 2048.0));
     ch_log_debug1("-------------------------\n");
 
-
     //Map the file into memory
+    // MAP_PRIVATE   - This mapping
     // MAP_ANONYMOUS - there is no file to back this memory
     // MAP_LOCKED - we want to lock the pages into memory, so they aren't swapped out at runtime
     // MAP_NORESERVE - if pages are locked, there's no need for swap memeory to back this mapping
     // MAP_POPULATE -  We want to all the page table entries to be populated so that we don't get page faults at runtime
     // MAP_HUGETLB - Use huge TBL entries to minimize page faults at runtime.
-
-    void* mem = mmap( NULL, total_mem_req, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_LOCKED | MAP_HUGETLB | MAP_POPULATE , -1, 0);
+    //
+    void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_LOCKED | MAP_HUGETLB | MAP_POPULATE, -1, 0);
     if(mem == MAP_FAILED){
-        ch_log_error("Could notcreate memory for bring \"%s\". Error=%s\n",  strerror(errno));
+        ch_log_error("Could not create memory for bring \"%s\". Error=%s\n",  this->name, strerror(errno));
         result = EIO_EINVALID;
-        goto error_unmap;
+        goto error_no_cleanup;
     }
 
     //Memory must be page aligned otherwise we're in trouble
@@ -407,59 +382,23 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     }
 
     //Pin the pages so that they don't get swapped out
-    if(mlock(mem,total_mem_req)){
+    if(mlock(mem,ring_mem_len)){
         ch_log_fatal("Could not lock memory map. Error=%s\n",   strerror(errno));
         result = EIO_EINVALID;
         goto error_unmap;
     }
 
-
-
-    //Populate all the right offsets
-    volatile bring_header_t* bring_head = (volatile void*)mem;;
-    priv->bring_head                    = bring_head;
-    bring_head->total_mem               = total_mem_req;
-    bring_head->rd_mem_start_offset     = header_mem;
-    bring_head->rd_mem_len              = priv->expand ? round_up(mem_per_ring,getpagesize()) : mem_per_ring;
-    bring_head->rd_slots_size           = slot_aligned_size;
-    bring_head->rd_slot_usr_size        = priv->slot_size;
-    bring_head->rd_slots                = bring_head->rd_mem_len / bring_head->rd_slots_size;
-    bring_head->wr_mem_start_offset     = round_up(bring_head->rd_mem_start_offset + bring_head->rd_mem_len, getpagesize());
-    bring_head->wr_mem_len              = priv->expand ? round_up(mem_per_ring,getpagesize()) : mem_per_ring;
-    bring_head->wr_slots_size           = slot_aligned_size;
-    bring_head->wr_slot_usr_size        = priv->slot_size;
-    bring_head->wr_slots                = bring_head->wr_mem_len / bring_head->wr_slots_size;
-
-
-
-    //Here's some debug to figure out if the mappings are correct
-//    const int64_t rd_end_offset = bring_head->rd_mem_start_offset + bring_head->rd_mem_len -1;
-//    const int64_t wr_end_offset = bring_head->wr_mem_start_offset + bring_head->wr_mem_len -1;
-//    (void)rd_end_offset;
-//    (void)wr_end_offset;
-//    ch_log_debug3("Server set bring memory offsets\n");
-//    ch_log_debug3("-------------------------\n");
-//    ch_log_debug3("total_mem            %016lx (%li)\n",   bring_head->total_mem, bring_head->total_mem);
-//    ch_log_debug3("rd_slots             %016lx (%li)\n",   bring_head->rd_slots,  bring_head->rd_slots);
-//    ch_log_debug3("rd_slots_size        %016lx (%li)\n",   bring_head->rd_slots_size, bring_head->rd_slots_size);
-//    ch_log_debug3("rd_slots_usr_size    %016lx (%li)\n",   bring_head->rd_slot_usr_size, bring_head->rd_slot_usr_size);
-//    ch_log_debug3("rd_mem_start_offset  %016lx (%li)\n",   bring_head->rd_mem_start_offset, bring_head->rd_mem_start_offset);
-//    ch_log_debug3("rd_mem_len           %016lx (%li)\n",   bring_head->rd_mem_len, bring_head->rd_mem_len);
-//    ch_log_debug3("rd_mem_end_offset    %016lx (%li)\n",   rd_end_offset, rd_end_offset);
-//
-//    ch_log_debug3("wr_slots             %016lx (%li)\n",   bring_head->wr_slots,  bring_head->wr_slots);
-//    ch_log_debug3("wr_slots_size        %016lx (%li)\n",   bring_head->wr_slots_size, bring_head->wr_slots_size);
-//    ch_log_debug3("wr_slots_usr_size    %016lx (%li)\n",   bring_head->wr_slot_usr_size, bring_head->wr_slot_usr_size);
-//    ch_log_debug3("wr_mem_start_offset  %016lx (%li)\n",   bring_head->wr_mem_start_offset,bring_head->wr_mem_start_offset);
-//    ch_log_debug3("wr_mem_len           %016lx (%li)\n",   bring_head->wr_mem_len, bring_head->wr_mem_len);
-//    ch_log_debug3("wr_mem_end_offset    %016lx (%li)\n",   wr_end_offset, wr_end_offset);
-//    ch_log_debug3("-------------------------\n");
-
+    //Populate all the right values
+    priv->ring_mem      = mem;
+    priv->ring_mem_len  = priv->expand ? round_up(ring_mem_len,getpagesize()): ring_mem_len;
+    priv->slots_size    = slot_aligned_size;
+    priv->slot_usr_size = priv->slot_size;
+    priv->slots         = ring_mem_len / priv->slots_size;
 
     ch_log_debug1("Done creating bring with %lu slots of size %lu, usable size %lu\n",
-            priv->bring_head->rd_slots,
-            priv->bring_head->rd_slots_size,
-            priv->bring_head->rd_slots_size - sizeof(bring_slot_header_t)
+            priv->slots,
+            priv->slots_size,
+            priv->slots_size - sizeof(bring_slot_header_t)
     );
 
     priv->fd = -1;
@@ -472,15 +411,19 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
 //    munlock(mem,total_mem_req);
 
 error_unmap:
-    munmap(mem,total_mem_req);
+    munmap(mem,ring_mem_len);
 
-//error_no_cleanup:
+error_no_cleanup:
     return result;
 
 }
 
 static eio_error_t bring_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
 {
+    (void)this;
+    (void)time;
+    (void)tsps;
+
     return EIO_ENOTIMPL;
 }
 
@@ -499,6 +442,10 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     const uint64_t slot_count  = args->slot_count;
     const uint64_t dontexpand  = args->dontexpand;
     const char* name           = args->name;
+    const int64_t name_len = strnlen(name, 1024);
+    this->name = calloc(name_len + 1, 1);
+    memcpy(this->name, name, name_len);
+
 
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -507,14 +454,13 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     priv->eof        = 0;
     priv->expand     = !dontexpand;
     priv->rd_sync_counter = 1; //This will be the first valid value
-    this->name       = calloc(1,strnlen(name, 1024) + 1);
-    strncpy(this->name, name, 1024);
+
 
     int64_t err = EIO_ETRYAGAIN;
     err = eio_bring_allocate(this);
     if(!err){
-        priv->rd_mem  = (char*)priv->bring_head + priv->bring_head->rd_mem_start_offset;
-        priv->wr_mem  = (char*)priv->bring_head + priv->bring_head->wr_mem_start_offset;
+        priv->rd_mem  = (char*)priv->ring_mem;
+        priv->wr_mem  = (char*)priv->ring_mem;
         priv->rd_head = (bring_slot_header_t*)priv->rd_mem;
         priv->wr_head = (bring_slot_header_t*)priv->wr_mem;
     }

@@ -56,9 +56,9 @@ ch_log_settings_t ch_log_settings = {
     .subsec_digits  = 3,
     .lvl_config  = { \
         { .color = CH_TERM_COL_NONE, .source = true,  .timestamp = true, .pid = false, .text = NULL }, /*FATAL*/\
-        { .color = CH_TERM_COL_NONE, .source = false, .timestamp = true, .pid = false, .text = NULL }, /*ERROR*/\
-        { .color = CH_TERM_COL_NONE, .source = false, .timestamp = true, .pid = false, .text = NULL }, /*WARNING*/\
-        { .color = CH_TERM_COL_NONE, .source = false, .timestamp = true, .pid = false, .text = NULL }, /*INFO*/\
+        { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = false, .text = NULL }, /*ERROR*/\
+        { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = false, .text = NULL }, /*WARNING*/\
+        { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = false, .text = NULL }, /*INFO*/\
         { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = true, .text = NULL }, /*DEBUG 1*/\
         { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = true, .text = NULL }, /*DEBUG 2*/\
         { .color = CH_TERM_COL_NONE, .source = true, .timestamp = true, .pid = true, .text = NULL }  /*DEBUG 3*/\
@@ -179,18 +179,16 @@ static int start_thread (cpu_set_t* avail_cpus, pthread_t *thread,
  * sending a second signal/
  */
 
-ch_word lthreads_count = 0;
 int64_t hw_stop_ns;
-pstats_t pstats_stop [MAX_LTHREADS] = {{0}};
+pstats_t pstats_stop[MAX_LTHREADS] = {{0}};
 static void signal_handler (int signum)
 {
     ch_log_debug1("Caught signal %li, sending shut down signal\n", signum);
     printf("\n");
     if(!lstop){
-        for (int tid = 0; tid < lthreads_count; tid++)
+        for (int tid = 0; tid < options.interfaces->count; tid++)
         {
-
-//        	eio_rd_hw_stats();
+            eio_rd_hw_stats(lparams_list[tid].nic_istream,&pstats_stop[tid]);
         }
 
         hw_stop_ns = time_now_ns();
@@ -875,6 +873,8 @@ eio_stream_t* alloc_nic(char* iface, bool use_dummy  )
     }
     else
     {
+
+        ch_log_info("New EIO stream %s\n", iface);
         args.type                     = EIO_EXA;
         args.args.exa.interface_rx    = iface;
         args.args.exa.interface_tx    = NULL;
@@ -1420,8 +1420,10 @@ int main (int argc, char** argv)
         lstats_t lstats_delta = lstats_subtract(&lstats_now[tid], &lstats_start[tid]);
         ldelta_total = lstats_add(&ldelta_total, &lstats_delta);
 
-        /* The signal handler stils pstats_stop for us*/
+        /* The signal handler fills pstats_stop for us*/
+        ch_log_debug1("###<><>### - rx count=%li\n", pstats_stop[tid].rx_count);
         pstats_t pstats_delta = pstats_subtract(&pstats_stop[tid], &pstats_start[tid]);
+
         pdelta_total = pstats_add(&pdelta_total, &pstats_delta);
 
 

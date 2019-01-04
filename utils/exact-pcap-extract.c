@@ -189,6 +189,9 @@ void new_file(buff_t* wr_buff, int file_num)
 
 void flush_to_disk(buff_t* wr_buff, int64_t* file_bytes_written, int64_t packets_written)
 {
+    (void)packets_written;
+    (void)file_bytes_written;
+
     //ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
     /* Not enough space in the buffer, time to flush it */
     const uint64_t written = write(wr_buff->fd,wr_buff->data,wr_buff->offset);

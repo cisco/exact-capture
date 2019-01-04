@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>
 #include <linux/sockios.h>
 #include <errno.h>
+#include <chaste/log/log.h>
 
 #include <linux/ethtool.h>
 #ifndef ETHTOOL_GET_TS_INFO
@@ -145,12 +146,18 @@ static eio_error_t exa_write_release(eio_stream_t* this, int64_t len, int64_t* t
 
 static inline eio_error_t exa_write_sw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
 
 static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void* stats)
 {
+    (void)this;
+    (void)stats;
+
 	return EIO_ENOTIMPL;
 }
 
@@ -334,16 +341,19 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     const bool kernel_bypass = args->kernel_bypass;
     const bool clear_buff    = args->clear_buff;
 
+    ch_log_info("Constructing exanic %s\n", args->interface_rx);
     /*TODO for the moment just use the RX interface name. Should think of
      * something smarter to do here? Maybe "rx:tx"?
      */
     const char* name = args->interface_rx;
-    this->name       = calloc(1,strnlen(name, 1024) + 1);
-    strncpy(this->name, name, 1024);
+    const int64_t name_len = strnlen(name, 1024);
+    this->name = calloc(name_len + 1, 1);
+    memcpy(this->name, name, name_len);
 
 
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
+    ch_log_info("Constructing exanic %s\n", args->interface_rx);
     if(interface_rx){
         if(parse_device(interface_rx, priv->rx_dev, &priv->rx_dev_id, &priv->rx_port))
         {
