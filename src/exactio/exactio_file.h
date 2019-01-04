@@ -15,10 +15,14 @@
 #include "exactio_stream.h"
 
 typedef struct  {
-    char* filename;
+    const char* filename;
     uint64_t read_buff_size;
+    bool read_on_mod;
+
     uint64_t write_buff_size;
-    uint64_t on_mod;
+    bool write_directio;
+    uint64_t write_max_file_size;
+
 } file_args_t;
 
 NEW_IOSTREAM_DECLARE(file, file_args_t);

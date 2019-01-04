@@ -35,6 +35,7 @@
 #include <chaste/chaste.h>
 
 #include "exactio_file.h"
+
 #include "exactio_timing.h"
 
 #define getpagesize() sysconf(_SC_PAGESIZE)
@@ -59,6 +60,10 @@ typedef struct file_priv {
 
     char* write_buff;
     int64_t write_buff_size;
+    bool write_directio;
+    int64_t write_max_file_size;
+    int64_t total_bytes_written;
+    uint64_t write_file_num;
 
     char* usr_write_buff;
     int64_t usr_write_buff_size;
@@ -67,9 +72,10 @@ typedef struct file_priv {
     int64_t filesize;
     int64_t blocksize;
 
-    exactio_file_mod_t on_mod; //0 ignore, 1 reset, 2, tail
+    exactio_file_mod_t read_on_mod; //0 ignore, 1 reset, 2, tail
     int notify_fd;
     int watch_descr;
+    int watch_descr_delete;
 
 } file_priv_t;
 
@@ -102,9 +108,95 @@ static void file_destroy(eio_stream_t* this)
         close(priv->fd);
     }
 
+    if(this->name)
+    {
+        free(this->name);
+        this->name = NULL;
+    }
+
     priv->closed = true;
 
 }
+
+/**
+ * Helper function to set the writer fd into "O_DIRECT" mode. This mode bypasses
+ * the kernel and syncs the buffers directly to the disk. However, it requires
+ * that data is block aligned, a multiple of block size and written to a block
+ * aligned offset. It's hard to know what the right block size is sometimes 512B
+ * sometimes 4kB. For simplicity, 4kB is assumed.
+ */
+static int set_direct (int desc, bool on)
+{
+    //ch_log_warn("O_DIRECT=%i\n", on);
+    int oldflags = fcntl (desc, F_GETFL, 0);
+    if (oldflags == -1)
+        return -1;
+
+    if (on)
+        oldflags |= O_DIRECT;
+    else
+        oldflags &= ~O_DIRECT;
+
+    return fcntl (desc, F_SETFL, oldflags);
+}
+
+static int file_open(eio_stream_t* this, bool allow_open_error)
+{
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    const char* filename = priv->filename;
+    priv->fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
+    if(priv->fd < 0){
+        if(!allow_open_error){
+            return EIO_ETRYAGAIN;
+        }
+
+        ch_log_error("Could not open file \"%s\". Error=%s\n", filename, strerror(errno));
+        file_destroy(this);
+        return -7;
+    }
+
+    if(priv->write_directio){
+        set_direct(priv->fd, true);
+    }
+
+    struct stat st;
+    if(fstat(priv->fd,&st) < 0){
+        ch_log_error("Cannot stat file \"%s\". Error=%s\n", filename, strerror(errno));
+        file_destroy(this);
+        return -8;
+    }
+    priv->filesize  = st.st_size;
+    priv->blocksize = st.st_blksize;
+    //ch_log_info("File size=%li, blocksize=%li\n", st.st_size, st.st_blksize);
+
+    priv->eof          = 0;
+    priv->closed      = false;
+
+    this->fd          = priv->fd;
+
+    if(priv->read_on_mod == 0){
+        return 0; //Early exit, success!
+    }
+
+    //We'll be listening to notify operations, so set it up
+    priv->notify_fd = inotify_init1(IN_NONBLOCK);
+    if(priv->notify_fd < 0){
+        ch_log_error("Could not start inotify for file \"%s\". Error=%s\n", filename, strerror(errno));
+        file_destroy(this);
+        return -9;
+    }
+
+    priv->watch_descr = inotify_add_watch(priv->notify_fd,filename, IN_MODIFY | IN_DELETE_SELF);
+    if(priv->watch_descr < 0){
+        ch_log_error("Could not begin to watch file \"%s\". Error=%s\n", filename, strerror(errno));
+        file_destroy(this);
+        return -10;
+    }
+
+    return EIO_ENONE;
+}
+
 
 
 //Read operations
@@ -166,7 +258,7 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
                 }
 
                 //In reset mode, a file change triggers a complete re-read
-                if( priv->on_mod == EXACTIO_FILE_MOD_RESET){
+                if( priv->read_on_mod == EXACTIO_FILE_MOD_RESET){
                     lseek(priv->fd, 0, SEEK_SET);
                 }
 
@@ -176,9 +268,25 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
 
             return EIO_ETRYAGAIN;
         }
+        else if(notif.mask == IN_DELETE_SELF)
+        {
 
+            close(priv->fd);
+            close(priv->notify_fd);
 
-        return EIO_ETRYAGAIN;
+            const int error = file_open(this, true);
+            if(error){
+                if( error == EIO_ETRYAGAIN){
+                    return EIO_ETRYAGAIN;
+                }
+                else{
+                    return EIO_EEOF;
+                }
+            }
+        }
+        else{
+            return EIO_ETRYAGAIN;
+        }
     }
 
     const ssize_t read_result = read(priv->fd, priv->read_buff, priv->read_buff_size);
@@ -222,6 +330,18 @@ static eio_error_t file_read_release(eio_stream_t* this, int64_t* ts)
     //Nothing to do here;
     return EIO_ENONE;
 }
+
+
+static inline eio_error_t file_read_sw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
 
 //Write operations
 static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
@@ -270,6 +390,7 @@ static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t
     return EIO_ENONE;
 }
 
+
 static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* ts)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
@@ -300,9 +421,35 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
         return EIO_ENONE;
     }
 
+    /* Is the file too big? Make a new one! */
+    ifunlikely(priv->write_max_file_size > 0 &&
+               priv->total_bytes_written >= priv->write_max_file_size)
+    {
+        //Rename the file with a number extension eg "myfile.17"
+        priv->write_file_num++;
+        const int bufferlen = snprintf(NULL,0,"%s.%lu", priv->filename, priv->write_file_num);
+        char* newfilename = calloc(1,bufferlen+1);
+        sprintf(newfilename,"%s.%lu", priv->filename, priv->write_file_num);
+        free(priv->filename);
+        priv->filename = newfilename;
+
+        //Close the old file, open a new one
+        close(priv->fd);
+        priv->fd = open(priv->filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
+        if(priv->fd < 0){
+            ch_log_error("Could not open file \"%s\". Error=%s\n", priv->filename, strerror(errno));
+            file_destroy(this);
+            return -7;
+        }
+
+        //reset everything!
+        priv->total_bytes_written = 0;
+    }
+
     //If the user has supplied their own buffer, use it
     const char* buff = priv->usr_write_buff ? priv->usr_write_buff : priv->write_buff;
     priv->usr_write_buff = NULL;
+
 
     ssize_t bytes_written = 0;
     while(bytes_written < len){
@@ -317,12 +464,34 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
             return EIO_ECLOSED;
         }
         bytes_written += result;
+        priv->total_bytes_written += result;
     }
 
     priv->writing = false;
     eio_nowns(ts);
     return EIO_ENONE;
 }
+
+
+static inline eio_error_t file_write_sw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+
+static eio_error_t file_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
+{
+    return EIO_ENOTIMPL;
+}
+
+
+
+
 
 
 /*
@@ -336,8 +505,16 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
 {
     const char* filename            = args->filename;
     const uint64_t read_buff_size   = args->read_buff_size;
+    const bool read_on_mod          = args->read_on_mod;
+
     const uint64_t write_buff_size  = ((args->write_buff_size + getpagesize() - 1) / getpagesize() ) * getpagesize();
-    const uint64_t on_mod           = args->on_mod;
+    const bool write_directio       = args->write_directio;
+    const bool write_max_file_size  = args->write_max_file_size;
+
+    const char* name = args->filename;
+    this->name       = calloc(1,strnlen(name, 1024) + 1);
+    strncpy(this->name, name, 1024);
+
 
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -352,8 +529,10 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
     memcpy(priv->filename, filename, name_len);
 
 
-    priv->read_buff_size  = read_buff_size;
-    priv->write_buff_size = write_buff_size;
+    priv->read_buff_size        = read_buff_size;
+    priv->write_buff_size       = write_buff_size;
+    priv->write_directio        = write_directio;
+    priv->write_max_file_size   = write_max_file_size;
 
     priv->read_buff = aligned_alloc(getpagesize(), priv->read_buff_size);
     if(!priv->read_buff){
@@ -375,48 +554,9 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
         }
     }
 
-    priv->fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, (mode_t)(0666));
-    if(priv->fd < 0){
-        ch_log_error("Could not open file \"%s\". Error=%s\n", filename, strerror(errno));
-        file_destroy(this);
-        return -7;
-    }
 
-    struct stat st;
-    if(fstat(priv->fd,&st) < 0){
-        ch_log_error("Cannot stat file \"%s\". Error=%s\n", filename, strerror(errno));
-        file_destroy(this);
-        return -8;
-    }
-    priv->filesize  = st.st_size;
-    priv->blocksize = st.st_blksize;
-    //ch_log_info("File size=%li, blocksize=%li\n", st.st_size, st.st_blksize);
-
-    priv->eof    = 0;
-    priv->closed = false;
-    priv->on_mod = on_mod;
-    this->fd = priv->fd;
-
-    if(priv->on_mod == 0){
-        return 0; //Early exit, success!
-    }
-
-    //We'll be listening to notify operations, so set it up
-    priv->notify_fd = inotify_init1(IN_NONBLOCK);
-    if(priv->notify_fd < 0){
-        ch_log_error("Could not start inotify for file \"%s\". Error=%s\n", filename, strerror(errno));
-        file_destroy(this);
-        return -9;
-    }
-
-    priv->watch_descr = inotify_add_watch(priv->notify_fd,filename, IN_MODIFY);
-    if(priv->watch_descr < 0){
-        ch_log_error("Could not begin to watch file \"%s\". Error=%s\n", filename, strerror(errno));
-        file_destroy(this);
-        return -10;
-    }
-
-    return 0;
+    priv->read_on_mod = read_on_mod;
+    return file_open(this, false);
 
 }
 

@@ -138,14 +138,14 @@ int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr
         *pkt_ftr = (expcap_pktftr_t*)(pbuf + pkt_hdr->caplen - sizeof(expcap_pktftr_t));
        const int64_t secs  = (*pkt_ftr)->ts_secs;
        const int64_t psecs = (*pkt_ftr)->ts_psecs;
-       tsps->tv_sec  = secs;
-       tsps->tv_psec = psecs;
+       tsps->secs  = secs;
+       tsps->psecs = psecs;
    }
    else{
        const int64_t secs  = pkt_hdr->ts.ns.ts_sec;
        const int64_t nsecs = pkt_hdr->ts.ns.ts_nsec;
-       tsps->tv_sec  = secs;
-       tsps->tv_psec = nsecs * 1000;
+       tsps->secs  = secs;
+       tsps->psecs = nsecs * 1000;
    }
 
     return 0;

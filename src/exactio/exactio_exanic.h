@@ -26,8 +26,8 @@
 
 
 typedef struct  {
-    char* interface_rx;
-    char* interface_tx;
+    const char* interface_rx;
+    const char* interface_tx;
     bool promisc;
     bool kernel_bypass;
     bool clear_buff;
@@ -189,6 +189,22 @@ static inline eio_error_t exa_read_release(eio_stream_t* this, int64_t* ts)
 
     //Nothing to do here;
     return result;
+}
+
+static inline eio_error_t exa_read_sw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+static inline eio_error_t exa_read_hw_stats(eio_stream_t* this, void* stats)
+{
+	exanic_port_stats_t* port_stats = (exanic_port_stats_t*)stats;
+	exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+	exanic_get_port_stats(priv->rx_nic,
+			priv->rx_port,
+			port_stats);
+
+	return EIO_ENONE;
 }
 
 

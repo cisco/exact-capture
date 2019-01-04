@@ -36,8 +36,9 @@
 #define BRING_SLOT_COUNT (128)
 
 /*Maximum number of input and output threads/cores*/
-#define MAX_OTHREADS   (64)
-#define MAX_ITHREADS   (64)
+#define MAX_WTHREADS   (64)
+#define MAX_LTHREADS   (16)
+#define MAX_LWCONNS (MAX_LTHREADS * MAX_WTHREADS)
 
 typedef struct
 {

@@ -59,6 +59,12 @@ static void exa_destroy(eio_stream_t* this)
         exanic_release_handle(priv->tx_nic);
     }
 
+    if(this->name)
+    {
+        free(this->name);
+        this->name = NULL;
+    }
+
     priv->closed = true;
 
 }
@@ -134,6 +140,34 @@ static eio_error_t exa_write_release(eio_stream_t* this, int64_t len, int64_t* t
     priv->tx_buffer     = NULL;
     priv->tx_buffer_len = 0;
     return EIO_ENONE;
+}
+
+
+static inline eio_error_t exa_write_sw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+
+static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void* stats)
+{
+	return EIO_ENOTIMPL;
+}
+
+static eio_error_t exa_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
+{
+    exanic_cycles_t* cycles = (exanic_cycles_t*)time;
+    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    iflikely(tsps){
+        struct exanic_timespecps exanic_tsps = {0};
+        exanic_cycles_to_timespecps(priv->rx_nic, *cycles, &exanic_tsps);
+        tsps->secs = exanic_tsps.tv_sec;
+        tsps->psecs = exanic_tsps.tv_psec;
+    }
+
+    return EIO_ENONE;
+
 }
 
 
@@ -299,6 +333,14 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     const bool promisc       = args->promisc;
     const bool kernel_bypass = args->kernel_bypass;
     const bool clear_buff    = args->clear_buff;
+
+    /*TODO for the moment just use the RX interface name. Should think of
+     * something smarter to do here? Maybe "rx:tx"?
+     */
+    const char* name = args->interface_rx;
+    this->name       = calloc(1,strnlen(name, 1024) + 1);
+    strncpy(this->name, name, 1024);
+
 
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 

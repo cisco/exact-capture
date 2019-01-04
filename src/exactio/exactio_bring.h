@@ -15,13 +15,10 @@
 #include "exactio_stream.h"
 
 typedef struct  {
-    char* filename;
-    uint64_t isserver;
-
-    //These params only required if server
     uint64_t slot_size;
     uint64_t slot_count;
     uint64_t dontexpand;
+    char* name;
 } bring_args_t;
 
 NEW_IOSTREAM_DECLARE(bring,bring_args_t);

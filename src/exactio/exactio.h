@@ -40,6 +40,15 @@ typedef struct {
     } args;
 } eio_args_t;
 
+/**
+ * A time structure to keep picosecond values.
+ */
+typedef struct
+{
+    int64_t secs; /**< seconds since UNIX epoch */
+    int64_t psecs; /**< picosecond portion */
+}   eio_timespecps_t;
+
 
 int eio_new(eio_args_t* args, eio_stream_t** result);
 void eio_des(eio_stream_t* this);
@@ -58,6 +67,17 @@ static inline eio_error_t eio_rd_rel(eio_stream_t* this, int64_t* ts)
     return this->vtable.read_release(this, ts);
 }
 
+static inline eio_error_t eio_rd_sw_stats(eio_stream_t* this, void* stats)
+{
+    return this->vtable.read_sw_stats(this, stats);
+}
+
+static inline eio_error_t eio_rd_hw_stats(eio_stream_t* this, void* stats)
+{
+    return this->vtable.read_hw_stats(this, stats);
+}
+
+
 //Write operations
 static inline eio_error_t eio_wr_acq(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
 {
@@ -69,6 +89,24 @@ static inline eio_error_t eio_wr_rel(eio_stream_t* this, int64_t len, int64_t* t
 {
     return this->vtable.write_release(this,len, ts);
 }
+
+static inline eio_error_t eio_wr_sw_stats(eio_stream_t* this, void* stats)
+{
+    return this->vtable.write_sw_stats(this, stats);
+}
+
+static inline eio_error_t eio_wr_hw_stats(eio_stream_t* this, void* stats)
+{
+    return this->vtable.write_hw_stats(this, stats);
+}
+
+
+static inline eio_error_t eio_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
+{
+    return this->vtable.time_to_tsps(this, time, tsps);
+}
+
+
 
 
 #endif /* EXACTIO_IO_H_ */

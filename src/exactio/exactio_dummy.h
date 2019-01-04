@@ -31,6 +31,7 @@ typedef struct  {
     dummy_read_mode rd_mode;
     uint64_t expcap_bytes;
     uint64_t exanic_pkt_bytes;
+    char* name;
 } dummy_args_t;
 
 

@@ -8,7 +8,7 @@
  *  Definition of utilities for operating with time (quickly)
  */
 
-#ifndef SRC_EXACTIO_EXACTIO_TIMING_H_
+#ifndef SRC_EXACTIO_EXACTIO_TIMING_H_OLD_
 #define SRC_EXACTIO_EXACTIO_TIMING_H_
 
 #include "../data_structs/timespecps.h"
@@ -24,4 +24,4 @@ void eio_nowns(int64_t* ts);
 //Convert a timespec ps to double double
 //double eio_tspstonsf(timespecps_t* ts);
 
-#endif /* SRC_EXACTIO_EXACTIO_TIMING_H_ */
+#endif /* SRC_EXACTIO_EXACTIO_TIMING_H_OLD_ */

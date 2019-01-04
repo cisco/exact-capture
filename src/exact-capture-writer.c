@@ -24,31 +24,10 @@ extern int64_t max_pkt_len;
 extern int64_t max_file_size;
 extern int64_t max_pcap_rec;
 
-extern wstats_t wstats[MAX_OTHREADS];
+extern wstats_t wstats[MAX_WTHREADS];
 
 
 
-/**
- * Helper function to set the writer fd into "O_DIRECT" mode. This mode bypasses
- * the kernel and syncs the buffers directly to the disk. However, it requires
- * that data is block aligned, a multiple of block size and written to a block
- * aligned offset. It's hard to know what the right block size is sometimes 512B
- * sometimes 4kB. For simplicity, 4kB is assumed.
- */
-int set_direct (int desc, bool on)
-{
-    //ch_log_warn("O_DIRECT=%i\n", on);
-    int oldflags = fcntl (desc, F_GETFL, 0);
-    if (oldflags == -1)
-        return -1;
-
-    if (on)
-        oldflags |= O_DIRECT;
-    else
-        oldflags &= ~O_DIRECT;
-
-    return fcntl (desc, F_SETFL, oldflags);
-}
 
 
 /**
@@ -113,61 +92,6 @@ static inline eio_error_t write_pcap_header (eio_stream_t* ostream,
     return err;
 }
 
-/*
- * Open a new output file with the path "dest". An ISO timestamp is added to
- * the path and a PCAP header written into the file.
- */
-eio_error_t open_file (char* dest, bool null_ostream,
-                       eio_stream_t** ostream, int64_t file_id)
-{
-
-    char final_format[1024] = {0};
-    snprintf(final_format, 1024, "%s-%li.expcap", dest, file_id  );
-
-
-    /* Buffers are supplied buy the reader so no internal buffer is needed */
-    const int64_t write_buff_size = 0;
-    ch_log_debug3("Opening disk file %s\n", final_format);
-    eio_args_t outargs = { 0 };
-    outargs.type = EIO_FILE;
-
-    outargs.args.file.filename = final_format;
-    outargs.args.file.read_buff_size = 0;      //We don't read from this stream
-    outargs.args.file.write_buff_size = write_buff_size;
-    eio_error_t err = eio_new (&outargs, ostream);
-    if (err)
-    {
-        ch_log_error("Could not create writer output %s\n", dest);
-        goto finished;
-    }
-
-    /* Replace the output stream with a null stream, for testing */
-    if (null_ostream)
-    {
-        ch_log_debug1("Creating null output stream in place of disk name: %s\n",
-                    dest);
-        outargs.type = EIO_DUMMY;
-        outargs.args.dummy.read_buff_size = 0;   /* We don't read form this stream */
-        outargs.args.dummy.write_buff_size = write_buff_size;
-        err = eio_new (&outargs, ostream);
-        if (err)
-        {
-            ch_log_error("Could not create writer output %s\n", dest);
-            goto finished;
-        }
-    }
-
-    set_direct ((*ostream)->fd, true);
-    err = write_pcap_header ((*ostream), nsec_pcap, max_pkt_len);
-
-    finished:
-    return err;
-}
-
-
-
-
-
 
 
 /**
@@ -179,110 +103,15 @@ void* writer_thread (void* params)
 {
 
     writer_params_t* wparams = params;
-    ch_log_debug1("Setting up ostream %s\n", wparams->destination);
-
-    CH_VECTOR(cstr)* ifaces = wparams->interfaces;
-    char* dest = wparams->destination;
-
-    char bring_name[BRING_NAME_LEN + 1]; /* +1 = space for null terminator */
-
-    const int64_t num_istreams = ifaces->count;
-    istream_state_t istreams[num_istreams];
-    for (int iface_idx = 0; iface_idx < num_istreams; iface_idx++)
-    {
-        istreams[iface_idx].dev_id   = wparams->exanic_dev_id[iface_idx];
-        istreams[iface_idx].port_num = wparams->exanic_port_id[iface_idx];
-
-        const char* iface = ifaces->first[iface_idx];
-
-        bzero (bring_name, BRING_NAME_LEN);
-        ch_word bring_name_chars = sprintf(bring_name,"EXCAP_%04X", getpid());
-        for (size_t i = 0;
-                i < strlen (iface) && bring_name_chars < BRING_NAME_LEN; i++)
-        {
-            if (isalnum(iface[i]))
-            {
-                bring_name[bring_name_chars] = iface[i];
-                bring_name_chars++;
-            }
-        }
-
-        bring_name[bring_name_chars] = '_';
-        bring_name_chars++;
-
-        for (size_t i = 0;
-                i < strlen (dest) && bring_name_chars < BRING_NAME_LEN; i++)
-        {
-            if (isalnum(dest[i]))
-            {
-                bring_name[bring_name_chars] = dest[i];
-                bring_name_chars++;
-            }
-            else{
-                bring_name[bring_name_chars] = '_';
-                bring_name_chars++;
-            }
-        }
+    ch_log_debug1("Starting writer thread for %s\n", wparams->disk_ostream->name);
 
 
-        eio_stream_t* istream = NULL;
-        eio_args_t inargs = { 0 };
-        ch_log_debug1("Connecting to bring input stream with name: %s\n", bring_name);
-        inargs.type = EIO_BRING;
-        inargs.args.bring.filename = bring_name;
-        inargs.args.bring.isserver = 0;
-        if (eio_new (&inargs, &istream))
-        {
-            ch_log_error("Could not create reader istream\n");
-            return NULL;
-        }
+    ring_istream_t* rings = wparams->rings;
+    int64_t rings_count   = wparams->rings_count;
 
-        /* Replace the bring with a null stream for testing, but make sure the
-         * bring exists  so that other threads will continue */
-        if (wparams->dummy_istream)
-        {
-            ch_log_debug1(
-                    "Creating null input stream in place of bring name: %s\n",
-                    bring_name);
-            inargs.type = EIO_DUMMY;
+    eio_stream_t* ostream  = wparams->disk_ostream;
 
-            /* This must be a multiple of the disk block size (assume 4kB)
-             * This value is imported across by the bring, so please be careful to
-             * keep it up to date*/
-            const int64_t bring_slot_size = 2 * 1024 * 1024; /* 1MB */
-            inargs.args.dummy.read_buff_size = bring_slot_size;
-            inargs.args.dummy.rd_mode = DUMMY_MODE_EXPCAP;
-            inargs.args.dummy.expcap_bytes = 512;
-            inargs.args.dummy.write_buff_size = 0;
-            if (eio_new (&inargs, &istream))
-            {
-                ch_log_error("Could not create writer istream\n");
-                return NULL;
-            }
-        }
-
-        istreams[iface_idx].istream = istream;
-
-        /*
-         * The writer thread needs to know which exanic the data came from
-         * so that it can do time stamp conversions
-         */
-        eio_stream_t* exa_stream = NULL;
-        eio_args_t exaargs = { 0 };
-        exaargs.type = EIO_EXA;
-        exaargs.args.exa.interface_rx = (char*) iface;
-        exaargs.args.exa.interface_tx = NULL;
-        int err = eio_new (&exaargs, &exa_stream);
-        if (err)
-        {
-            ch_log_error("Could not create listener input stream %s\n");
-            return NULL;
-        }
-        istreams[iface_idx].exa_istream = exa_stream;
-    }
-
-    eio_stream_t* ostream = NULL;
-    if (open_file (dest, wparams->dummy_ostream, &ostream, 0))
+    if (write_pcap_header (ostream, nsec_pcap, max_pkt_len))
     {
         ch_log_error("Could not open new output file\n");
         goto finished;
@@ -292,24 +121,30 @@ void* writer_thread (void* params)
     //**************************************************************************
     //Writer - Real work begins here!
     //**************************************************************************
+    /*
+    * We set the current wistream to be equal to the thread id, so that by
+    * default, different writer threads start to listen to different listener
+    * queues. The modulus (%) is here because number of writer threads is not
+    * necessarily equal to number of listener threads. The number of listener
+    * threads is equal to rings_count.
+    */
+    int64_t curr_ring = wparams->wtid % rings_count;
 
-    int64_t curr_istream = wparams->wtid;
     char* rd_buff = NULL;
     int64_t rd_buff_len = 0;
-    int64_t bytes_written = 0;
 
-    wstats_t* stats = &wstats[curr_istream];
+    wstats_t* stats = &wstats[curr_ring];
 
     while (!wstop)
     {
 
         //Find a buffer
-        for (; !wstop; curr_istream++, stats->spins++)
+        for (; !wstop; curr_ring++, stats->spins++)
         {
             //ch_log_debug3("Looking at istream %li/%li\n", curr_istream,
             //              num_istreams);
-            curr_istream = curr_istream >= num_istreams ? 0 : curr_istream;
-            eio_stream_t* istream = istreams[curr_istream].istream;
+            curr_ring = curr_ring >= rings_count ? 0 : curr_ring;
+            eio_stream_t* istream = rings[curr_ring].ring_istream;
             eio_error_t err = eio_rd_acq (istream, &rd_buff, &rd_buff_len,
                                           NULL);
             if (err == EIO_ETRYAGAIN)
@@ -344,8 +179,8 @@ void* writer_thread (void* params)
         /* Update the timestamps / stats in the packets */
         pcap_pkthdr_t* pkt_hdr = (pcap_pkthdr_t*) rd_buff;
         expcap_pktftr_t* pkt_ftr = NULL;
-        eio_stream_t* exa_istream = istreams[curr_istream].exa_istream;
-        struct exanic_timespecps tsps = {0,0};
+        eio_stream_t* nic_istream = rings[curr_ring].nic_istream;
+        timespecps_t tsps = {0,0};
 
 #if !defined(NDEBUG) || !defined(NOIFASSERT)
         int64_t hdrs_count = -1;
@@ -381,15 +216,15 @@ void* writer_thread (void* params)
             pkt_ftr = (expcap_pktftr_t*)((char*)pkt_hdr_next - sizeof(expcap_pktftr_t));
 
             /* Convert the timestamp from cycles into UTC */
-            const exanic_cycles_t ts_cycles = pkt_hdr->ts.raw;
-            exa_rxcycles_to_timespecps(exa_istream, ts_cycles, &tsps);
+            exanic_cycles_t ts_cycles = pkt_hdr->ts.raw;
+            eio_time_to_tsps(nic_istream, &ts_cycles, &tsps);
 
             /* Assign the corrected timestamp from one of the above modes */
-            pkt_hdr->ts.ns.ts_nsec = tsps.tv_psec / 1000;
-            pkt_hdr->ts.ns.ts_sec =  tsps.tv_sec;
+            pkt_hdr->ts.ns.ts_nsec = tsps.psecs / 1000;
+            pkt_hdr->ts.ns.ts_sec =  tsps.secs;
 
-            pkt_ftr->ts_secs  = tsps.tv_sec;
-            pkt_ftr->ts_psecs = tsps.tv_psec;
+            pkt_ftr->ts_secs  = tsps.secs;
+            pkt_ftr->ts_psecs = tsps.psecs;
 
             /* Skip to the next header, these should have been preloaded by now*/
             pkt_hdr = (pcap_pkthdr_t*)pkt_hdr_next;
@@ -412,34 +247,21 @@ void* writer_thread (void* params)
 
         /* Now flush to disk */
         eio_wr_rel (ostream, rd_buff_len, NULL);
-        bytes_written += rd_buff_len;
 
         /* Release the istream */
-        eio_stream_t* istream = istreams[curr_istream].istream;
+        eio_stream_t* istream = rings[curr_ring].ring_istream;
         eio_rd_rel (istream, NULL);
         /* Make sure we look at the next ring next time for fairness */
-        curr_istream++;
+        curr_ring++;
 
         /*  Stats */
         stats->dbytes += rd_buff_len;
 
-        /* Is the file too big? Make a new one! */
-        ifunlikely(max_file_size > 0 && bytes_written >= max_file_size)
-        {
-            eio_des (ostream);
-            if (open_file (dest, wparams->dummy_ostream, &ostream,
-                           istreams[curr_istream].file_id ))
-            {
-                ch_log_error("Could not open new output file\n");
-                goto finished;
-            }
-            bytes_written = 0;
-        }
     }
 
     finished:
     /* Flush old buffer if it exists */
-    ch_log_debug1("Writer thread %s exiting\n", wparams->destination);
+    ch_log_debug1("Writer thread %s exiting\n", wparams->disk_ostream->name);
 
     return NULL;
 }

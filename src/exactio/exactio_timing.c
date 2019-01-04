@@ -38,8 +38,8 @@ void eio_nowns(int64_t* ts)
     *ts =  now.tv_sec * 1000 * 1000 * 1000 + now.tv_nsec;
 
 //    uint32_t aux;
-//    ts->tv_sec = 0;
-//    ts->tv_psec = rdtscp(&aux); // * 1000 / 3.5;
+//    ts->secs = 0;
+//    ts->psecs = rdtscp(&aux); // * 1000 / 3.5;
 }
 
 
@@ -50,8 +50,8 @@ double eio_tspstonsf(timespecps_t* ts)
     }
 
 
-    const double secs = ts->tv_sec;
-    const double psec = ts->tv_psec;
+    const double secs = ts->secs;
+    const double psec = ts->psecs;
 
     return secs * 1000.0 * 1000.0 * 1000.0 + psec / 1000.0;
 }
@@ -63,8 +63,8 @@ int64_t eio_tspstonsll(timespecps_t* ts)
         return ~0;
     }
 
-    const int64_t secs = ts->tv_sec;
-    const int64_t psec = ts->tv_psec;
+    const int64_t secs = ts->secs;
+    const int64_t psec = ts->psecs;
     //return (double)psec/3.5;
 
     return secs * 1000 * 1000 * 1000 + psec / 1000;

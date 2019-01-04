@@ -31,14 +31,8 @@ static __thread int port_id;
 static __thread lstats_t* lstats;
 
 /*Assumes there there never more than 64 listener threads!*/
-extern lstats_t lstats_all[MAX_ITHREADS];
+extern lstats_t lstats_all[MAX_LTHREADS];
 
-
-typedef struct
-{
-    eio_stream_t* ostream;
-    bool pcap_hdr;
-} ostream_state_t;
 
 
 static inline void add_dummy_packet(char* obuff,
@@ -351,21 +345,21 @@ static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
 /*
  * Look for a new output stream and output the buffer from that stream
  */
-static inline int get_obuff(int64_t curr_ostream, int64_t num_ostreams,
-                            ostream_state_t* ostreams,
-        char** obuff, int64_t* obuff_len )
+static inline int get_ring(int64_t curr_ring, int64_t ring_count,
+                            eio_stream_t** rings, char** ring_buff,
+                            int64_t* obuff_len )
 {
-    ch_log_debug2("Looking for new ostream %li..\n", num_ostreams);
+    ch_log_debug2("Looking for new ring..\n");
     /* Look at each ostream just once */
-    for (int i = 0; i < num_ostreams; i++, curr_ostream++)
+    for (int i = 0; i < ring_count; i++, curr_ring++)
     {
-        curr_ostream = curr_ostream >= num_ostreams ? 0 : curr_ostream;
-        eio_stream_t* ostream = ostreams[curr_ostream].ostream;
-        eio_error_t err = eio_wr_acq (ostream, obuff, obuff_len, NULL);
+        curr_ring = curr_ring >= ring_count ? 0 : curr_ring;
+        eio_stream_t* ring = rings[curr_ring];
+        eio_error_t err = eio_wr_acq (ring, ring_buff, obuff_len, NULL);
         iflikely(err == EIO_ENONE)
         {
-            ch_log_debug1("Got ostream at index %li..\n", curr_ostream);
-            return curr_ostream;
+            ch_log_debug1("Got ring at index %li..\n", curr_ring);
+            return curr_ring;
         }
         iflikely(err == EIO_ETRYAGAIN)
         {
@@ -377,7 +371,7 @@ static inline int get_obuff(int64_t curr_ostream, int64_t num_ostreams,
     }
 
     ch_log_debug2("Could not find an ostream!\n");
-    return curr_ostream;
+    return curr_ring;
 
 }
 
@@ -399,8 +393,7 @@ void* listener_thread (void* params)
 {
     listener_params_t* lparams = params;
     ch_log_debug1("Creating exanic listener thread id=%li on interface=%s\n",
-                    lparams->ltid, lparams->interface);
-
+                    lparams->ltid, lparams->nic_istream->name);
     /*
      * Set up a dummy packet to pad out extra space when needed
      * dummy packet areas are per thread to avoid falsely sharing memory
@@ -408,143 +401,15 @@ void* listener_thread (void* params)
     char dummy_data[DISK_BLOCK * 2];
     init_dummy_data(dummy_data, DISK_BLOCK *2);
 
-    const CH_VECTOR(cstr)* dests = lparams->dests;
-    const int64_t num_ostreams = dests->count;
-    char* iface = lparams->interface;
     const int64_t ltid = lparams->ltid; /* Listener thread id */
 
     /* Thread local storage parameters */
-    dev_id  = lparams->exanic_dev_num;
-    port_id = lparams->exanic_port;
     lstats  = &lstats_all[ltid];
 
-    eio_stream_t* istream = NULL;
-    eio_args_t inargs;
-    bzero(&inargs,sizeof(inargs));
-    inargs.type                     = EIO_EXA;
-    inargs.args.exa.interface_rx    = iface;
-    inargs.args.exa.interface_tx    = NULL;
-    inargs.args.exa.kernel_bypass   = lparams->kernel_bypass;
-    inargs.args.exa.promisc         = lparams->promisc;
-    inargs.args.exa.clear_buff      = lparams->clear_buff;
-    int err = eio_new (&inargs, &istream);
-    if (err)
-    {
-        ch_log_fatal("Could not create listener input stream %s\n");
-        return NULL;
-    }
+    eio_stream_t** rings = lparams->rings;
+    int64_t rings_count = lparams->rings_count;
+    eio_stream_t* nic = lparams->nic_istream;
 
-    if (lparams->dummy_istream)
-    {
-        /* Replace the input stream with a dummy stream */
-        ch_log_debug1("Creating null output stream in place of exanic name: %s\n",
-                    iface);
-        inargs.type = EIO_DUMMY;
-        inargs.args.dummy.read_buff_size = 64;
-        inargs.args.dummy.rd_mode = DUMMY_MODE_EXANIC;
-        inargs.args.dummy.exanic_pkt_bytes = inargs.args.dummy.read_buff_size;
-        inargs.args.dummy.write_buff_size = 0;   /* We don't write to this stream */
-        err = eio_new (&inargs, &istream);
-        if (err)
-        {
-            ch_log_error("Could not create listener input stream %s\n");
-            return NULL;
-        }
-    }
-    ch_log_debug1("Done. Setting up exanic listener for interface %s\n", iface);
-
-    if (dests->count > MAX_OTHREADS)
-    {
-        ch_log_fatal("Too many destinations\n");
-    }
-    ch_log_debug1("Setting up %li listener bring streams for interface %s\n",
-                  num_ostreams, lparams->interface);
-    char bring_name[BRING_NAME_LEN + 1] = {0}; /* +1 = space for null terminator */
-
-    ostream_state_t ostreams[num_ostreams];
-    for (int ostr_idx = 0; ostr_idx < num_ostreams; ostr_idx++)
-    {
-        const char* dest = dests->first[ostr_idx];
-
-        /* Turn the interface string into a unique shared memory name */
-        bzero (bring_name, BRING_NAME_LEN);
-        ch_word bring_name_chars = sprintf(bring_name,"EXCAP_%04X", getpid());
-        for (size_t i = 0;
-                i < strlen (iface) && bring_name_chars < BRING_NAME_LEN; i++)
-        {
-            if (isalnum(iface[i]))
-            {
-                bring_name[bring_name_chars] = iface[i];
-                bring_name_chars++;
-            }
-        }
-
-        bring_name[bring_name_chars] = '_';
-        bring_name_chars++;
-
-        for (size_t i = 0;
-                i < strlen (dest) && bring_name_chars < BRING_NAME_LEN; i++)
-        {
-            if (isalnum(dest[i]))
-            {
-                bring_name[bring_name_chars] = dest[i];
-                bring_name_chars++;
-            }
-            else{
-                bring_name[bring_name_chars] = '_';
-                bring_name_chars++;
-
-            }
-        }
-
-        /* This must be a multiple of the disk block size (assume 4kB)*/
-
-        ch_log_debug1("Creating bring output stream with name: %s\n", bring_name);
-        eio_stream_t* ostream = NULL;
-        eio_args_t outargs;
-        bzero(&outargs, sizeof(outargs));
-        outargs.type = EIO_BRING;
-        outargs.args.bring.filename = bring_name;
-        outargs.args.bring.isserver = 1;
-        outargs.args.bring.slot_size  = BRING_SLOT_SIZE;
-        outargs.args.bring.slot_count = BRING_SLOT_COUNT;
-        ch_log_debug1("slots=%li, slot_count=%li\n", outargs.args.bring.slot_size,
-                      outargs.args.bring.slot_count);
-        if (eio_new (&outargs, &ostream))
-        {
-            ch_log_error(
-                    "Could not create listener output stream with name %s\n",
-                    bring_name);
-            return NULL;
-        }
-
-        if (lparams->dummy_ostream)
-        {
-            ch_log_debug1(
-                    "Creating null output stream in place of bring name: %s\n",
-                    bring_name);
-            outargs.type = EIO_DUMMY;
-            outargs.args.dummy.read_buff_size = 0; /*We don't read form this stream */
-            outargs.args.dummy.write_buff_size = BRING_SLOT_SIZE;
-            if (eio_new (&outargs, &ostream))
-            {
-                ch_log_error(
-                        "Could not create listener output stream with name %s\n",
-                        bring_name);
-                return NULL;
-            }
-            ch_log_debug1(
-                    "Done creating null output stream at index %li with name: %s\n",
-                    ostr_idx, bring_name);
-        }
-
-        ch_log_debug1("Assigning ostream at index %li\n", ostr_idx);
-        ostreams[ostr_idx].ostream = ostream;
-        ostreams[ostr_idx].pcap_hdr = false;
-    }
-    ch_log_debug1(
-            "Done setting up exanic listener bring streams for interface %s\n",
-            iface);
 
     //**************************************************************************
     //Listener - Real work begins here!
@@ -553,7 +418,7 @@ void* listener_thread (void* params)
     int64_t obuff_len = 0;
 
     /* May want to change this depending on scheduling goals */
-    int64_t curr_ostream = ltid;
+    int64_t curr_ring = ltid;
     int64_t bytes_added = 0;
 
 
@@ -595,7 +460,7 @@ void* listener_thread (void* params)
             ch_log_debug1( "Buffer flush: buff_full=%i, timed_out =%i, obuff_len (%li) - bytes_added (%li) = %li < full_packet_size x 2 (%li) = (%li)\n",
                     buff_full, timed_out, obuff_len, bytes_added, obuff_len - bytes_added, max_pcap_rec * 2);
 
-            flush_buffer(ostreams[curr_ostream].ostream, bytes_added,
+            flush_buffer(rings[curr_ring], bytes_added,
                     obuff_len, obuff, prev_pkt_hw_time,
                     dummy_data);
 
@@ -610,10 +475,9 @@ void* listener_thread (void* params)
         while(!obuff && !lstop)
         {
             /* We don't have an output buffer to work with, so try to grab one*/
-            curr_ostream = get_obuff(curr_ostream,num_ostreams,ostreams,
-                    &obuff,&obuff_len);
+            curr_ring = get_ring(curr_ring,rings_count,rings, &obuff,&obuff_len);
 
-            if(curr_ostream < 0){
+            if(curr_ring < 0){
                 goto finished;
             }
 
@@ -627,7 +491,7 @@ void* listener_thread (void* params)
             {
                 ch_log_debug2("No buffer, dropping packet..\n");
                 eio_error_t err = EIO_ENONE;
-                err = eio_rd_acq(istream, NULL, NULL, NULL);
+                err = eio_rd_acq(nic, NULL, NULL, NULL);
                 iflikely(err == EIO_ENONE)
                 {
                     lstats->dropped++;
@@ -637,7 +501,7 @@ void* listener_thread (void* params)
                 {
                     lstats->swofl++;
                 }
-                err = eio_rd_rel(istream, NULL);
+                err = eio_rd_rel(nic, NULL);
                 if(err == EIO_ESWOVFL )
                 {
                     lstats->swofl++;
@@ -651,7 +515,7 @@ void* listener_thread (void* params)
 
         /* This func tries to rx one packet it returns the number of bytes RX'd
          * this may be zero if no packet was RX'd, or if there was an error */
-        const int64_t rx_bytes = rx_packet(istream, obuff + bytes_added, obuff +
+        const int64_t rx_bytes = rx_packet(nic, obuff + bytes_added, obuff +
                                            obuff_len, &prev_pkt_hw_time, &dropped);
 
         ifunlikely(rx_bytes == 0)
@@ -682,7 +546,7 @@ void* listener_thread (void* params)
 
 finished:
     ch_log_debug1("Listener thread %i for %s exiting\n", lparams->ltid,
-                lparams->interface);
+                lparams->nic_istream->name);
 
 
     //Remove any last headers that are waiting
@@ -692,12 +556,12 @@ finished:
     }
 
     if(obuff){
-        flush_buffer(ostreams[curr_ostream].ostream, bytes_added, obuff_len,
+        flush_buffer(rings[curr_ring], bytes_added, obuff_len,
                 obuff, prev_pkt_hw_time, dummy_data);
     }
 
     ch_log_debug1("Listener thread %i for %s done.\n", lparams->ltid,
-                lparams->interface);
+                lparams->nic_istream->name);
 
     //free(params); ??
     return NULL;

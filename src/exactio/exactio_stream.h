@@ -71,6 +71,9 @@ typedef struct exactio_stream_interface_s{
     //----------------
     eio_error_t (*read_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts );
     eio_error_t (*read_release)(eio_stream_t* this,int64_t* ts);
+    eio_error_t (*read_sw_stats)(eio_stream_t* this,void* stats);
+    eio_error_t (*read_hw_stats)(eio_stream_t* this,void* stats);
+
 
     //Write operations
     //----------------
@@ -78,6 +81,13 @@ typedef struct exactio_stream_interface_s{
     //for write_release len is zero, the frame the data is not committed
     eio_error_t (*write_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts );
     eio_error_t (*write_release)(eio_stream_t* this, int64_t len, int64_t* ts );
+    eio_error_t (*write_sw_stats)(eio_stream_t* this,void* stats);
+    eio_error_t (*write_hw_stats)(eio_stream_t* this,void* stats);
+
+    //Ancillary Operations
+    //----------------
+    //Convert internal timestamp representation to a picosecond times specification
+    eio_error_t (*time_to_tsps)(eio_stream_t* this, void* time, timespecps_t* ts );
 
 
 } exactio_stream_interface_t;
@@ -97,6 +107,11 @@ struct exactio_stream_s {
 
     int fd;
 
+    /*
+     * A unique name that defines this stream, useful for debugging;
+     */
+    char* name;
+
 };
 
 
@@ -112,8 +127,13 @@ struct exactio_stream_s {
     static const exactio_stream_interface_t NAME##_stream_interface = {\
             .read_acquire   = NAME##_read_acquire,\
             .read_release   = NAME##_read_release,\
+			.read_sw_stats  = NAME##_read_sw_stats,\
+			.read_hw_stats  = NAME##_read_hw_stats,\
             .write_acquire  = NAME##_write_acquire,\
             .write_release  = NAME##_write_release,\
+			.write_sw_stats = NAME##_write_sw_stats,\
+			.write_hw_stats = NAME##_write_hw_stats,\
+			.time_to_tsps   = NAME##_time_to_tsps,\
             .destroy        = NAME##_destroy,\
     };\
     \

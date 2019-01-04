@@ -33,29 +33,40 @@
 
 #include "exactio/exactio.h"
 #include "exactio/exactio_exanic.h"
-#include "exactio/exactio_timing.h"
-
 #include "exact-capture.h"
+#include "exactio/exactio_timing.h"
 
 typedef struct
 {
-    char* interface;
-    CH_VECTOR(cstr)* dests;
-    volatile bool* stop;
-    bool dummy_istream;
-    bool dummy_ostream;
     int64_t ltid; /* Listener thread id */
+    volatile bool* stop;
 
-    exanic_t* nic;
-    int exanic_port;
-    int exanic_dev_num;
-    char exanic_dev[16];
+    eio_stream_t* nic_istream;
 
-    bool kernel_bypass;
-    bool promisc;
-    bool clear_buff;
+    eio_stream_t** rings;
+    int64_t rings_count;
+
+
+//    bool clear_buff;
 
 } listener_params_t;
+
+typedef struct
+{
+    eio_stream_t* istream;
+
+//    char* interface;
+//    exanic_t* nic;
+//    int exanic_port;
+//    int exanic_dev_num;
+//    char exanic_dev[16];
+//    bool kernel_bypass;
+//    bool promisc;
+//    bool dummy_istream;
+//    bool dummy_ostream;
+
+
+} istream_state_t;
 
 void* listener_thread (void* params);
 

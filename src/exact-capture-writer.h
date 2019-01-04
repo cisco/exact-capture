@@ -33,31 +33,35 @@
 
 #include "exactio/exactio.h"
 #include "exactio/exactio_exanic.h"
-#include "exactio/exactio_timing.h"
-
 #include "exact-capture.h"
+#include "exactio/exactio_timing.h"
 #include "utils.h"
 
+
+/*
+ * Wrap up istreams for the writer thread. The writer cares which listener NIC
+ * packets came from so that it can do timestamp conversion
+ */
 typedef struct
 {
-    char* destination;
-    CH_VECTOR(cstr)* interfaces;
-    int* exanic_port_id;
-    int* exanic_dev_id;
-    volatile bool* stop;
-    bool dummy_istream;
-    bool dummy_ostream;
-    int64_t wtid; /* Writer thread id */
-} writer_params_t;
+    eio_stream_t* ring_istream;
+    eio_stream_t* nic_istream;
+} ring_istream_t;
+
+
+
+
 
 typedef struct
 {
-    eio_stream_t* istream;
-    eio_stream_t* exa_istream;
-    int64_t file_id;
-    ch_word dev_id;
-    ch_word port_num;
-} istream_state_t;
+    int64_t wtid; /* Writer thread id */
+    eio_stream_t* disk_ostream;
+    ring_istream_t* rings;
+    int64_t rings_count;
+    volatile bool* stop;
+} writer_params_t;
+
+
 
 void* writer_thread (void* params);
 

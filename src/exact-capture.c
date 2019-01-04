@@ -35,11 +35,10 @@
 
 #include "exactio/exactio.h"
 #include "exactio/exactio_exanic.h"
-#include "exactio/exactio_timing.h"
-
 #include "exact-capture.h"
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
+#include "exactio/exactio_timing.h"
 
 #define EXACT_MAJOR_VER 1
 #define EXACT_MINOR_VER 0
@@ -70,23 +69,11 @@ ch_log_settings_t ch_log_settings = {
 
 USE_CH_OPTIONS;
 
+#define CALIB_MODE_MASK_NIC  0x001
+#define CALIB_MODE_MASK_RING 0x002
+#define CALIB_MODE_MASK_DISK 0x004
 
-/*
- * Calibration modes
- *
- * Mode ExaNIC   BRING   DISK
- *
- * 0 -
- * 1 - X
- * 2 -          X
- * 3 -                  X
- * 4 - X        X
- * 5 - X                X
- * 6 -          X       X
- * 7 - X        X       X
- *
- * X = dummy stream is used
- */
+
 
 static struct
 {
@@ -94,7 +81,7 @@ static struct
     CH_VECTOR(cstr)* dests;
     ch_cstr cpus_str;
     ch_word snaplen;
-    ch_word calib_mode;
+    ch_word calib_flags;
     ch_word max_file;
     ch_cstr log_file;
     ch_bool verbose;
@@ -123,14 +110,24 @@ typedef exanic_port_stats_t pstats_t;
 
 
 /*Assumes there there never more than 64 listener threads!*/
-volatile lstats_t lstats_all[MAX_ITHREADS];
-pstats_t port_stats[MAX_ITHREADS];
-listener_params_t lparams_list[MAX_ITHREADS];
+volatile lstats_t lstats_all[MAX_LTHREADS];
+pstats_t port_stats[MAX_LTHREADS];
+listener_params_t lparams_list[MAX_LTHREADS];
 
-volatile wstats_t wstats[MAX_ITHREADS];
-writer_params_t wparams_list[MAX_ITHREADS];
-int device_ids[MAX_ITHREADS] = {0};
-int port_ids[MAX_OTHREADS] = {0};
+volatile wstats_t wstats[MAX_LTHREADS];
+writer_params_t wparams_list[MAX_LTHREADS];
+
+int device_ids[MAX_LTHREADS] = {0};
+int port_ids[MAX_WTHREADS] = {0};
+
+
+/* Statically define this for now, the numbers will be small */
+eio_stream_t*    nic_istreams[MAX_LTHREADS]   = {0};
+eio_stream_t*    ring_ostreams[MAX_LWCONNS]  = {0};
+
+ring_istream_t   ring_istreams[MAX_LWCONNS]   = {0};
+eio_stream_t*    disk_ostreams[MAX_WTHREADS]  = {0};
+
 
 
 /* Get the next valid CPU from a CPU set */
@@ -184,7 +181,7 @@ static int start_thread (cpu_set_t* avail_cpus, pthread_t *thread,
 
 ch_word lthreads_count = 0;
 int64_t hw_stop_ns;
-pstats_t pstats_stop [MAX_ITHREADS] = {{0}};
+pstats_t pstats_stop [MAX_LTHREADS] = {{0}};
 static void signal_handler (int signum)
 {
     ch_log_debug1("Caught signal %li, sending shut down signal\n", signum);
@@ -192,9 +189,8 @@ static void signal_handler (int signum)
     if(!lstop){
         for (int tid = 0; tid < lthreads_count; tid++)
         {
-            exanic_get_port_stats(lparams_list[tid].nic,
-                                  lparams_list[tid].exanic_port,
-                                  &pstats_stop[tid]);
+
+//        	eio_rd_hw_stats();
         }
 
         hw_stop_ns = time_now_ns();
@@ -366,12 +362,9 @@ static void print_lstats(lstats_t lstats_delta, listener_params_t lparams,
 
     if(options.more_verbose_lvl == 1 )
     {
-        ch_log_info("Listener:%02i %s:%i (%i.%i) -- %.2fGbps %.2fMpps %.2fMB %li Pkts %lierrs %lidrp %liswofl\n",
+        ch_log_info("Listener:%02i %s -- %.2fGbps %.2fMpps %.2fMB %li Pkts %lierrs %lidrp %liswofl\n",
                tid,
-               lparams.exanic_dev,
-               lparams.exanic_port,
-               lparams.exanic_dev_num,
-               lparams.exanic_port,
+               lparams.nic_istream->name,
 
                sw_rx_rate_gbs,
                sw_rx_rate_mpps,
@@ -383,12 +376,9 @@ static void print_lstats(lstats_t lstats_delta, listener_params_t lparams,
     }
     else if(options.more_verbose_lvl == 2)
     {
-        ch_log_info("Listener:%02i %s:%i (%i.%i) -- %.2fGbps %.2fMpps (HW:%.2fiMpps) %.2fMB %li Pkts (HW:%i Pkts) [lost?:%li] (%.3fM Spins1 %.3fM SpinsP ) %lierrs %lidrp %liswofl %lihwofl\n",
+        ch_log_info("Listener:%02i %s -- %.2fGbps %.2fMpps (HW:%.2fiMpps) %.2fMB %li Pkts (HW:%i Pkts) [lost?:%li] (%.3fM Spins1 %.3fM SpinsP ) %lierrs %lidrp %liswofl %lihwofl\n",
                tid,
-               lparams.exanic_dev,
-               lparams.exanic_port,
-               lparams.exanic_dev_num,
-               lparams.exanic_port,
+               lparams.nic_istream->name,
 
                sw_rx_rate_gbs,
                sw_rx_rate_mpps,
@@ -420,10 +410,10 @@ static void print_wstats(wstats_t wstats_delta,writer_params_t wparams, int tid,
 
 
 
-    const int dst_str_len = strlen(wparams.destination);
+    const int dst_str_len = strlen(wparams.disk_ostream->name);
     char file_pretty[dst_str_len+1];
     bzero(file_pretty, dst_str_len+1);
-    strncpy(file_pretty,wparams_list->destination, dst_str_len);
+    strncpy(file_pretty,wparams.disk_ostream->name, dst_str_len);
 
     char* pretty = file_pretty;
     if(dst_str_len > 17){
@@ -753,64 +743,23 @@ static CH_VECTOR(pthread)* start_listener_threads(cpu_set_t listener_cpus)
 
     ch_log_debug1("Starting up listener %li threads\n",
                   options.interfaces->count);
-    int cap_port = 0;
+    ch_word disks_count = options.dests->count;
+    int64_t listener_idx = 0;
     for (ch_cstr* opt_int = options.interfaces->first;
             opt_int < options.interfaces->end;
             opt_int = options.interfaces->next (options.interfaces, opt_int),
-            cap_port++)
+            listener_idx++)
     {
 
         ch_log_debug1("Starting listener thread on interface %s\n", *opt_int);
 
-        listener_params_t* lparams = lparams_list + cap_port;
-        lparams->interface      = *opt_int;
-        lparams->dests          = options.dests;
-        lparams->stop           = &lstop;
-        lparams->ltid           = lthreads->count;
-        lparams->promisc        = !options.no_promisc;
-        lparams->kernel_bypass  = options.no_kernel;
-        lparams->clear_buff     = options.clear_buff;
+        listener_params_t* lparams = lparams_list + listener_idx;
+        lparams->ltid         = lthreads->count;
+        lparams->stop        = &lstop;
+        lparams->nic_istream = nic_istreams[listener_idx];
+        lparams->rings       = &ring_ostreams[listener_idx * disks_count];
+        lparams->rings_count = disks_count;
 
-        if(parse_device(lparams->interface, lparams->exanic_dev,
-                        &lparams->exanic_dev_num, &lparams->exanic_port))
-        {
-            ch_log_fatal("%s: no such interface or not an ExaNIC\n",
-                     lparams->interface);
-        }
-
-        port_ids[cap_port] = lparams->exanic_port;
-        device_ids[cap_port] = lparams->exanic_dev_num;
-
-        lparams->nic = exanic_acquire_handle(lparams->exanic_dev);
-        if (!lparams->nic){
-            ch_log_fatal("Could not acquire ExaNIC handle: %s\n",
-                         exanic_get_last_error());
-        }
-
-
-        ch_log_debug1("There are %li outputs in total\n", options.dests->count);
-        for (int dest_idx = 0; dest_idx < lparams->dests->count; dest_idx++)
-        {
-            ch_log_debug1("Dests=%s\n", lparams->dests->first[dest_idx]);
-        }
-
-        bool dummy_istr = 0;
-        bool dummy_ostr = 0;
-        switch (options.calib_mode)
-        {
-            case 0:                                 break; //Nothing
-            case 1: dummy_istr = 1;                 break;
-            case 2: dummy_ostr = 1;                 break;
-            case 3:                                 break; //Nothing relevant
-            case 4: dummy_istr = 1; dummy_ostr = 1; break;
-            case 5: dummy_istr = 1;                 break;
-            case 6: dummy_ostr = 1;                 break;
-            case 7: dummy_istr = 1; dummy_ostr = 1; break;
-            default:
-                ch_log_fatal("Unknown calibration mode option\n");
-        }
-        lparams->dummy_istream = dummy_istr;
-        lparams->dummy_ostream = dummy_ostr;
 
         pthread_t thread = { 0 };
         if (start_thread (&listener_cpus, &thread, listener_thread,
@@ -845,46 +794,23 @@ static CH_VECTOR(pthread)* start_writer_threads(cpu_set_t writers)
 
 
     ch_log_debug1("Starting up writer threads\n");
-    int wport = 0;
+    ch_word nics_count = options.interfaces->count;
+    ch_word writer_idx = 0;
     for (ch_cstr* opt_dest = options.dests->first;
             opt_dest < options.dests->end;
-            opt_dest = options.dests->next (options.dests, opt_dest), wport++)
+            opt_dest = options.dests->next (options.dests, opt_dest), writer_idx++)
     {
 
-        writer_params_t* wparams = wparams_list + wport;
-        wparams->destination = *opt_dest;
-        wparams->interfaces = options.interfaces;
-        wparams->stop = &lstop;
-        wparams->wtid = wthreads->count;
-        wparams->exanic_dev_id = device_ids;
-        wparams->exanic_port_id = port_ids;
-
-
-        ch_log_debug1("Starting writer thread for destination %s\n", *opt_dest);
-
-
-        bool dummy_istr = 0;
-        bool dummy_ostr = 0;
-        switch (options.calib_mode)
-        {
-            /*       Istream           Ostream          */
-            case 0:                                 break;
-            case 1:                                 break;
-            case 2: dummy_istr = 1;                 break;
-            case 3:                 dummy_ostr = 1; break;
-            case 4: dummy_istr = 1;                 break;
-            case 5:                 dummy_ostr = 1; break;
-            case 6: dummy_istr = 1; dummy_ostr = 1; break;
-            case 7: dummy_istr = 1; dummy_ostr = 1; break;
-            default:
-                ch_log_fatal("Unknown calibration mode option\n");
-        }
-        wparams->dummy_istream = dummy_istr;
-        wparams->dummy_ostream = dummy_ostr;
+        writer_params_t* wparams = wparams_list + writer_idx;
+        wparams->wtid         = wthreads->count;
+        wparams->stop         = &lstop;
+        wparams->disk_ostream = disk_ostreams[writer_idx];
+        wparams->rings        = &ring_istreams[writer_idx * nics_count];
+        wparams->rings_count  = nics_count;
 
         pthread_t thread = { 0 };
 
-        /* allow reuses of the writer CPUs*/
+        /* allow reuse of the writer CPUs*/
         if(CPU_COUNT(&writer_cpus) == 0){
             writer_cpus = writers;
         }
@@ -921,6 +847,274 @@ static void remove_dups(CH_VECTOR(cstr)* opt_vec)
 
 
 
+eio_stream_t* alloc_nic(char* iface, bool use_dummy  )
+{
+
+    eio_stream_t* istream = NULL;
+    eio_args_t args = {0};
+    bzero(&args,sizeof(args));
+    eio_error_t err = EIO_ENONE;
+
+    if (use_dummy)
+    {
+        /* Replace the input stream with a dummy stream */
+        ch_log_debug1("Creating null output stream in place of exanic name: %s\n",
+                      iface);
+        args.type = EIO_DUMMY;
+        args.args.dummy.read_buff_size = 64;
+        args.args.dummy.rd_mode = DUMMY_MODE_EXANIC;
+        args.args.dummy.exanic_pkt_bytes = args.args.dummy.read_buff_size;
+        args.args.dummy.write_buff_size = 0;   /* We don't write to this stream */
+        args.args.dummy.name = iface;
+        err = eio_new (&args, &istream);
+        if (err)
+        {
+            ch_log_fatal("Could not create listener input stream %s\n");
+            return NULL;
+        }
+    }
+    else
+    {
+        args.type                     = EIO_EXA;
+        args.args.exa.interface_rx    = iface;
+        args.args.exa.interface_tx    = NULL;
+        args.args.exa.kernel_bypass   = options.no_kernel;
+        args.args.exa.promisc         = !options.no_promisc;
+        args.args.exa.clear_buff      = options.clear_buff;
+        eio_new (&args, &istream);
+        if (err)
+        {
+            ch_log_fatal("Could not create listener input stream %s\n");
+            return NULL;
+        }
+
+    }
+    ch_log_debug1("Done. Setting up exanic listener for interface %s\n", iface);
+
+    return istream;
+}
+
+
+
+
+eio_stream_t* alloc_disk(char* filename, bool use_dummy)
+{
+
+        eio_stream_t* ostream = NULL;
+
+        /* Buffers are supplied buy the reader so no internal buffer is needed */
+        const int64_t write_buff_size = 0;
+        ch_log_debug3("Opening disk file %s\n", filename);
+        eio_args_t args = {0};
+        bzero(&args,sizeof(args));
+        eio_error_t err = EIO_ENONE;
+
+        /* Replace the output stream with a null stream, for testing */
+        if (use_dummy)
+        {
+            ch_log_debug1("Creating null output stream in place of disk name: %s\n",
+                        filename);
+            args.type = EIO_DUMMY;
+            args.args.dummy.read_buff_size = 0;   /* We don't read this stream */
+            args.args.dummy.write_buff_size = write_buff_size;
+            args.args.dummy.name = filename;
+            err = eio_new (&args, &ostream);
+            if (err)
+            {
+                ch_log_fatal("Could not create dummy writer output %s\n", filename);
+                return NULL;
+            }
+        }
+        else
+        {
+            args.type = EIO_FILE;
+
+            args.args.file.filename              = filename;
+            args.args.file.read_buff_size        = 0; //We don't read from this stream
+            args.args.file.write_buff_size       = write_buff_size;
+            args.args.file.write_directio        = true; //Use directio mode
+            args.args.file.write_max_file_size   = max_file_size;
+            err = eio_new (&args, &ostream);
+            if (err)
+            {
+                ch_log_fatal("Could not create writer output %s\n", filename);
+                return NULL;
+            }
+        }
+        return ostream;
+}
+
+
+
+eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname)
+{
+    eio_args_t args = {0};
+    bzero(&args,sizeof(args));
+    eio_stream_t* iostream = NULL;
+
+    int namelen = snprintf(NULL,0,"%s:%s", iface, fname );
+
+    if(use_dummy)
+    {
+        args.type = EIO_DUMMY;
+        args.args.dummy.write_buff_size = BRING_SLOT_SIZE;
+        args.args.dummy.read_buff_size  = BRING_SLOT_SIZE;
+        args.args.dummy.rd_mode         = DUMMY_MODE_EXPCAP;
+        args.args.dummy.expcap_bytes    = 512;
+        args.args.dummy.name = calloc(1,namelen + 1);
+        snprintf(args.args.dummy.name, 128, "%s:%s", iface, fname);
+
+        ch_log_debug1("Creating dummy ring %s with write_size=%li, read_sizet=%li\n",
+                      args.args.dummy.name,
+                      args.args.dummy.write_buff_size,
+                      args.args.dummy.read_buff_size);
+
+        if (eio_new (&args, &iostream))
+        {
+            ch_log_fatal("Could not create dummy ring\n");
+            return NULL;
+        }
+
+        free(args.args.dummy.name);
+    }
+    else
+    {
+        args.type = EIO_BRING;
+        /* This must be a multiple of the disk block size (assume 4kB)*/
+        args.args.bring.slot_size  = BRING_SLOT_SIZE;
+        args.args.bring.slot_count = BRING_SLOT_COUNT;
+        args.args.bring.name = calloc(1,namelen + 1);
+        snprintf(args.args.bring.name, 128, "%s:%s", iface, fname);
+
+        ch_log_debug1("Creating ring %s with slots=%li, slot_count=%li\n",
+                      args.args.bring.name,
+                      args.args.bring.slot_size,
+                      args.args.bring.slot_count);
+
+        if (eio_new (&args, &iostream))
+        {
+            ch_log_fatal("Could not create ring\n" );
+            return NULL;
+        }
+
+        free(args.args.bring.name);
+    }
+
+
+
+    return iostream;
+}
+
+
+
+void allocate_iostreams()
+{
+    const int64_t nics  = options.interfaces->count;
+    const int64_t disks = options.dests->count;
+    const int64_t rings = nics * disks;
+
+
+    if(nics > MAX_LTHREADS )
+    {
+        ch_log_fatal("Too many NICs requested. Increase the value of MAX_LTHREADS and recompile\n");
+    }
+    if(nics > MAX_LTHREADS )
+    {
+        ch_log_fatal("Too many disks requested. Increase the value of MAX_WTHREADS and recompile\n");
+    }
+    if(rings > MAX_LWCONNS)
+    {
+        ch_log_fatal("Too many rings requested. Increase the value of MAX_LWCONNS and recompile\n");
+    }
+
+    const ch_word dummy_nic   = CALIB_MODE_MASK_NIC  & options.calib_flags;
+    const ch_word dummy_disk  = CALIB_MODE_MASK_DISK & options.calib_flags;
+    const ch_word dummy_ring  = CALIB_MODE_MASK_RING & options.calib_flags;
+
+    uint64_t nic_idx = 0;
+    uint64_t disk_idx = 0;
+    for (ch_cstr* interface = options.interfaces->first;
+            interface < options.interfaces->end;
+            interface = options.interfaces->next (options.interfaces, interface),
+            nic_idx++)
+    {
+
+        ch_log_info("Allocating NIC interface %s at NIC index %i\n", *interface, nic_idx);
+
+
+        //Allocate / connect each NIC to an istream
+        nic_istreams[nic_idx] = alloc_nic(*interface, dummy_nic);
+
+        //Allocate rings to connect each listener thread a writer thread
+        disk_idx = 0;
+        for (ch_cstr* filename = options.dests->first;
+                   filename < options.dests->end;
+                   filename = options.dests->next (options.dests, filename),
+                   disk_idx++)
+        {
+            const uint64_t ring_idx = nic_idx * disks + disk_idx;
+            ch_log_info("Allocating ring %s:%s (%i:%i) at ring index %i\n",
+                        *interface,
+                        *filename,
+                        nic_idx,
+                        disk_idx,
+                        ring_idx);
+
+            ring_ostreams[ring_idx] = alloc_ring(dummy_ring, *interface, *filename);
+        }
+
+    }
+
+
+    disk_idx = 0;
+    for (ch_cstr* filename = options.dests->first;
+            filename < options.dests->end;
+            filename = options.dests->next (options.dests, filename),
+            disk_idx++)
+    {
+
+        ch_log_info("Allocating disk %s at disk index %i\n", *filename, disk_idx);
+
+        disk_ostreams[disk_idx] = alloc_disk( *filename, dummy_disk);
+
+        //Allocate rings to connect each listener thread a writer thread
+        nic_idx = 0;
+        for (ch_cstr* interface = options.interfaces->first;
+                   interface < options.interfaces->end;
+                   interface = options.interfaces->next (options.interfaces, interface),
+                   nic_idx++)
+       {
+
+            const int64_t listen_ring_idx = nic_idx * disks + disk_idx;
+            ch_log_info("Getting ring %s:%s (%i:%i) at listener ring index %i ",
+                                   *interface,
+                                   *filename,
+                                   nic_idx,
+                                   disk_idx,
+                                   listen_ring_idx);
+
+            eio_stream_t* ring = ring_ostreams[listen_ring_idx];
+            eio_stream_t* nic  = nic_istreams[nic_idx];
+
+
+            const int64_t writer_ring_idx = disk_idx * nics + nic_idx;
+            ch_log_info("Setting ring %s:%s (%i:%i) at writer ring index %i\n",
+                                   *interface,
+                                   *filename,
+                                   nic_idx,
+                                   disk_idx,
+                                   writer_ring_idx);
+
+            ring_istreams[writer_ring_idx].ring_istream = ring;
+            ring_istreams[writer_ring_idx].nic_istream  = nic;
+        }
+
+    }
+
+}
+
+
+
 /**
  * Main loop sets up threads and listens for stats / configuration messages.
  */
@@ -949,7 +1143,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,     'd', "debug-logging",     "Turn on debug logging output",                     &options.debug_log, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'w', "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'S', "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 'p', "perf-test",         "Performance test mode [0-7]",                      &options.calib_mode, 0);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 'p', "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
     ch_opt_addbi (CH_OPTION_FLAG,     'C', "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
 
     ch_opt_parse (argc, argv);
@@ -1015,7 +1209,7 @@ int main (int argc, char** argv)
     cpus_t cpus = {{{0}}};
     parse_cpus(options.cpus_str, &cpus);
 
-    if (options.calib_mode < 0 || options.calib_mode > 7)
+    if (options.calib_flags < 0 || options.calib_flags > 7)
     {
         ch_log_fatal("Calibration mode must be between 0 and 7\n");
     }
@@ -1034,10 +1228,9 @@ int main (int argc, char** argv)
         ch_log_warn("Warning: Sharing listener and management CPUs is not recommended\n");
     }
 
-
+    //Allocate all I/O streams (NICs, Disks and rings to join threads)
+    allocate_iostreams();
     CH_VECTOR(pthread)* lthreads = start_listener_threads(cpus.listeners);
-    lthreads_count = lthreads->count;
-
     CH_VECTOR(pthread)* wthreads = start_writer_threads(cpus.writers);
 
     /* Set the management thread CPU core */
@@ -1050,22 +1243,22 @@ int main (int argc, char** argv)
     /* Main thread - Real work begins here!                                  */
     /*************************************************************************/
     result = 0;
-    lstats_t lstats_start[MAX_ITHREADS] = {{0}};
-    lstats_t lstats_prev[MAX_ITHREADS] = {{0}};
-    lstats_t lstats_now[MAX_ITHREADS] = {{0}};
+    lstats_t lstats_start[MAX_LTHREADS] = {{0}};
+    lstats_t lstats_prev[MAX_LTHREADS] = {{0}};
+    lstats_t lstats_now[MAX_LTHREADS] = {{0}};
 
     lstats_t lempty = {0};
     lstats_t ldelta_total = {0};
 
-    pstats_t pstats_start[MAX_ITHREADS] = {{0}};
-    pstats_t pstats_prev [MAX_ITHREADS] = {{0}};
-    pstats_t pstats_now  [MAX_ITHREADS] = {{0}};
+    pstats_t pstats_start[MAX_LTHREADS] = {{0}};
+    pstats_t pstats_prev [MAX_LTHREADS] = {{0}};
+    pstats_t pstats_now  [MAX_LTHREADS] = {{0}};
 
     pstats_t pempty = {0};
     pstats_t pdelta_total = {0};
 
-    wstats_t wstats_prev[MAX_OTHREADS] = {{0}};
-    wstats_t wstats_now[MAX_ITHREADS] = {{0}};
+    wstats_t wstats_prev[MAX_WTHREADS] = {{0}};
+    wstats_t wstats_now[MAX_LTHREADS] = {{0}};
 
     wstats_t wempty = {0};
     wstats_t wdelta_total = {0};
@@ -1079,9 +1272,7 @@ int main (int argc, char** argv)
 
     for (int tid = 0; tid < lthreads->count; tid++)
     {
-        exanic_get_port_stats(lparams_list[tid].nic,
-                              lparams_list[tid].exanic_port,
-                              &pstats_start[tid]);
+        eio_rd_hw_stats(nic_istreams[tid], &pstats_start[tid]);
         pstats_prev[tid] = pstats_start[tid];
     }
 
@@ -1118,9 +1309,8 @@ int main (int argc, char** argv)
         /* Collect data as close together as possible before starting processing */
         for (int tid = 0; tid < lthreads->count; tid++)
         {
-            exanic_get_port_stats(lparams_list[tid].nic,
-                                  lparams_list[tid].exanic_port,
-                                  &pstats_now[tid]);
+
+            eio_rd_hw_stats(nic_istreams[tid], &pstats_now[tid]);
             lstats_now[tid] = lstats_all[tid];
         }
         for (int tid = 0; tid < wthreads->count; tid++)
