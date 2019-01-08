@@ -107,6 +107,11 @@ static inline eio_error_t eio_time_to_tsps(eio_stream_t* this, void* time, times
 }
 
 
+static inline eio_error_t eio_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
+{
+    return this->vtable.get_id(this,id_major,id_minor);
+}
+
 
 
 #endif /* EXACTIO_IO_H_ */

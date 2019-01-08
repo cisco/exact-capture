@@ -67,7 +67,8 @@ typedef struct exactio_dummy_priv_s {
 
     int64_t rd_mode;
 
-
+    int64_t id_major;
+    int64_t id_minor;
 
 } dummy_priv_t;
 
@@ -288,6 +289,20 @@ static eio_error_t dummy_time_to_tsps(eio_stream_t* this, void* time, timespecps
     return EIO_ENOTIMPL;
 }
 
+static eio_error_t dummy_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
+{
+    dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    ifassert(!id_major || !id_minor){
+        return EIO_EINVALID;
+    }
+
+    *id_major = priv->id_major;
+    *id_minor = priv->id_minor;
+
+    return EIO_ENONE;
+}
+
 
 
 /*
@@ -303,17 +318,18 @@ static eio_error_t dummy_construct(eio_stream_t* this, dummy_args_t* dummy_args)
     const uint64_t read_buff_size   = dummy_args->read_buff_size;
     const uint64_t write_buff_size  = dummy_args->write_buff_size;
     const dummy_read_mode rd_mode   = dummy_args->rd_mode;
+    const int64_t id_major          = dummy_args->id_major;
+    const int64_t id_minor          = dummy_args->id_minor;
 
     const char* name                = dummy_args->name;
     const int64_t name_len = strnlen(name, 1024);
     this->name = calloc(name_len + 1, 1);
     memcpy(this->name, name, name_len);
 
-
-
-
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
+    priv->id_major = id_major;
+    priv->id_minor = id_minor;
 
     priv->read_buff_size  = round_up(read_buff_size,getpagesize()); //Round up to nearest page size
     priv->write_buff_size = round_up(write_buff_size,getpagesize()); //Round up to nearest page size

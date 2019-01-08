@@ -64,13 +64,13 @@ typedef struct exa_priv {
     char* tx_buffer;
     int64_t tx_buffer_len;
 
-
     bool closed;
+
+    int64_t id_major;
+    int64_t id_minor;
+
 } exa_priv_t;
 
-
-//eio_error_t exa_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts );
-//eio_error_t exa_read_release(eio_stream_t* this, int64_t* ts);
 
 //Read operations
 static inline eio_error_t exa_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts )
