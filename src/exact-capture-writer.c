@@ -16,6 +16,7 @@
 #include "data_structs/expcap.h"
 
 #include <netinet/ip.h>
+#include <limits.h>
 
 
 extern volatile bool wstop;
@@ -104,7 +105,7 @@ void* writer_thread (void* params)
 
     writer_params_t* wparams = params;
     ch_log_debug1("Starting writer thread for %s\n", wparams->disk_ostream->name);
-
+    nice(-15); //Raise this thread prioirty
 
     ring_istream_t* rings = wparams->rings;
     int64_t rings_count   = wparams->rings_count;
@@ -141,19 +142,20 @@ void* writer_thread (void* params)
         //Find a buffer
         for (; !wstop; curr_ring++, stats->spins++)
         {
+
             //ch_log_debug3("Looking at istream %li/%li\n", curr_istream,
             //              num_istreams);
             curr_ring = curr_ring >= rings_count ? 0 : curr_ring;
             eio_stream_t* istream = rings[curr_ring].ring_istream;
             eio_error_t err = eio_rd_acq (istream, &rd_buff, &rd_buff_len,
                                           NULL);
-            if (err == EIO_ETRYAGAIN)
+            iflikely(err == EIO_ETRYAGAIN)
             {
                 /* relax the CPU in this tight loop */
                 __asm__ __volatile__ ("pause");
                 continue; /* Look at the next ring */
             }
-            if (err != EIO_ENONE)
+            ifassert(err != EIO_ENONE)
             {
                 ch_log_error(
                         "Unexpected error %i trying to get istream buffer\n",
@@ -165,7 +167,7 @@ void* writer_thread (void* params)
                           rd_buff_len);
             ifassert(rd_buff_len == 0)
             {
-                ch_log_error("Unexpected packet size of 0\n");
+                ch_log_error("Unexpected ring size of 0\n");
                 goto finished;
             }
 
@@ -231,14 +233,10 @@ void* writer_thread (void* params)
         }
 
 
-
-        /* Give the input buffer over to the outputs stream (zero copy)*/
         eio_error_t err = eio_wr_acq (ostream, &rd_buff, &rd_buff_len, NULL);
         if (err)
         {
-            ch_log_error(
-                    "Could not get writer buffer with unexpected error %i\n",
-                    err);
+            ch_log_error( "Could not get writer buffer with unexpected error %i\n", err);
             if (err == EIO_ECLOSED)
             {
                 goto finished;
@@ -246,12 +244,22 @@ void* writer_thread (void* params)
         }
 
         /* Now flush to disk */
-        eio_wr_rel (ostream, rd_buff_len, NULL);
+        err = eio_wr_rel (ostream, rd_buff_len, NULL);
+        if (err)
+        {
+            ch_log_error( "Could not release writer buffer with unexpected error %i\n", err);
+            if (err == EIO_ECLOSED)
+            {
+                ch_log_error( "Disk is full. Exiting writer thread\n");
+                goto finished;
+            }
+        }
 
         /* Release the istream */
         eio_stream_t* istream = rings[curr_ring].ring_istream;
         eio_rd_rel (istream, NULL);
         /* Make sure we look at the next ring next time for fairness */
+
         curr_ring++;
 
         /*  Stats */

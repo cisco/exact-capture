@@ -394,6 +394,8 @@ void* listener_thread (void* params)
     listener_params_t* lparams = params;
     ch_log_debug1("Creating exanic listener thread id=%li on interface=%s\n",
                     lparams->ltid, lparams->nic_istream->name);
+
+    nice(-20); //Raise this thread prioirty
     /*
      * Set up a dummy packet to pad out extra space when needed
      * dummy packet areas are per thread to avoid falsely sharing memory

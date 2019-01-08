@@ -144,29 +144,6 @@ static inline eio_error_t exa_read_acquire(eio_stream_t* this, char** buffer, in
     }
 }
 
-//Convert an exanic timestamp into cycles
-static inline eio_error_t exa_rxcycles_to_timespec(eio_stream_t* this, exanic_cycles_t cycles, struct timespec* ts )
-{
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-
-    iflikely(ts){
-        exanic_cycles_to_timespec(priv->rx_nic, cycles, ts);
-    }
-
-    return EIO_ENONE;
-}
-
-static inline eio_error_t exa_rxcycles_to_timespecps(eio_stream_t* this, exanic_cycles_t cycles, struct exanic_timespecps* ts )
-{
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-
-    iflikely(ts){
-        exanic_cycles_to_timespecps(priv->rx_nic, cycles, ts);
-    }
-
-    return EIO_ENONE;
-}
-
 
 
 

@@ -155,7 +155,10 @@ static int file_open(eio_stream_t* this, bool allow_open_error)
     }
 
     if(priv->write_directio){
-        set_direct(priv->fd, true);
+        if(set_direct(priv->fd, true) < 0){
+            ch_log_warn("Could not set O_DIRECTIO, performance may be affected\n");
+        }
+
     }
 
     struct stat st;
@@ -388,8 +391,7 @@ static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t
     }
 
     priv->writing = true;
-    (void)ts;
-    //eio_nowns(ts);
+    eio_nowns(ts);
 
     return EIO_ENONE;
 }

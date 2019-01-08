@@ -39,6 +39,7 @@
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
 #include "exactio/exactio_timing.h"
+#include "exactio/exactio_bring.h"
 
 #define EXACT_MAJOR_VER 1
 #define EXACT_MINOR_VER 0
@@ -112,7 +113,9 @@ typedef exanic_port_stats_t pstats_t;
 /*Assumes there there never more than 64 listener threads!*/
 volatile lstats_t lstats_all[MAX_LTHREADS];
 pstats_t port_stats[MAX_LTHREADS];
+
 listener_params_t lparams_list[MAX_LTHREADS];
+
 
 volatile wstats_t wstats[MAX_LTHREADS];
 writer_params_t wparams_list[MAX_LTHREADS];
@@ -175,20 +178,30 @@ static int start_thread (cpu_set_t* avail_cpus, pthread_t *thread,
 }
 
 /*
- * Signal handler tells all threads to stop, but if you can force exit by
- * sending a second signal/
+ * Signal handler tells all threads to stop, but you can force exit by
+ * sending a second signal
  */
 
 int64_t hw_stop_ns;
 pstats_t pstats_stop[MAX_LTHREADS] = {{0}};
+bstats_t bstats_wr_stop[MAX_LWCONNS] = {{0}};
+
 static void signal_handler (int signum)
 {
     ch_log_debug1("Caught signal %li, sending shut down signal\n", signum);
     printf("\n");
-    if(!lstop){
-        for (int tid = 0; tid < options.interfaces->count; tid++)
+    const ch_word listeners_count = options.interfaces->count;
+    if(!lstop)
+    {
+        for (int tid = 0; tid < listeners_count ; tid++)
         {
             eio_rd_hw_stats(lparams_list[tid].nic_istream,&pstats_stop[tid]);
+            const int64_t rings_count = lparams_list[tid].rings_count;
+            for(int ring = 0; ring < rings_count; ring++){
+                eio_wr_hw_stats(lparams_list[tid].rings[ring],
+                                &bstats_wr_stop[tid * rings_count + ring]);
+            }
+
         }
 
         hw_stop_ns = time_now_ns();
@@ -197,15 +210,36 @@ static void signal_handler (int signum)
 
     }
 
-
     /* We've been here before. Hard stop! */
     wstop = 1;
     ch_log_info("Caught hard exit. Stopping now. \n");
     exit(1);
 
 
-
 }
+
+static inline bstats_t bstats_subtract(bstats_t* lhs, bstats_t* rhs)
+{
+    bstats_t result = {0};
+    result.minflt = lhs->minflt - rhs->minflt;
+    result.majflt = lhs->majflt - rhs->majflt;
+    result.utime  = lhs->utime  - rhs->utime;
+    result.stime  = lhs->stime  - rhs->stime;
+    return result;
+}
+
+
+static inline bstats_t bstats_add(bstats_t* lhs, bstats_t* rhs)
+{
+    bstats_t result = {0};
+    result.minflt = lhs->minflt + rhs->minflt;
+    result.majflt = lhs->majflt + rhs->majflt;
+    result.utime  = lhs->utime  + rhs->utime;
+    result.stime  = lhs->stime  + rhs->stime;
+    return result;
+}
+
+
 
 static inline lstats_t lstats_subtract(lstats_t* lhs, lstats_t* rhs)
 {
@@ -285,7 +319,6 @@ static inline wstats_t wstats_add(wstats_t* lhs, wstats_t* rhs)
 
 
 typedef struct {
-    cpu_set_t management;
     cpu_set_t listeners;
     cpu_set_t writers;
 } cpus_t;
@@ -298,16 +331,7 @@ typedef struct {
 static void parse_cpus(char* cpus_str, cpus_t* cpus)
 {
 
-    char* mancpu_str = strtok(cpus_str, ":");
-    if(mancpu_str == NULL)
-        goto fail;
-
-    const int64_t mcpu = strtoll(mancpu_str, NULL, 10);
-    ch_log_debug1("Setting management CPU to %li\n", mcpu);
-    CPU_SET(mcpu, &cpus->management);
-
-
-    char* listeners_str = strtok(NULL, ":");
+    char* listeners_str = strtok(cpus_str, ":");
     if(listeners_str == NULL)
         goto fail;
 
@@ -333,19 +357,18 @@ static void parse_cpus(char* cpus_str, cpus_t* cpus)
         writer_str = strtok(NULL, ",");
     }
 
-
     return;
 
 fail:
-    ch_log_fatal("Error: Expecting CPU string in format m:r,r,r:w,w,w");
-
+    ch_log_fatal("Error: Expecting CPU string in format r,r,r:w,w,w");
 
 }
 
 
 
 static void print_lstats(lstats_t lstats_delta, listener_params_t lparams,
-                  pstats_t pstats_delta, int tid, int64_t delta_ns)
+                  pstats_t pstats_delta,  bstats_t* bstats_deltas,
+                  ch_word bstats_count, int tid, int64_t delta_ns)
 {
     const double sw_rx_rate_gbs  = ((double) lstats_delta.bytes_rx * 8) /
             delta_ns;
@@ -374,7 +397,21 @@ static void print_lstats(lstats_t lstats_delta, listener_params_t lparams,
     }
     else if(options.more_verbose_lvl == 2)
     {
-        ch_log_info("Listener:%02i %s -- %.2fGbps %.2fMpps (HW:%.2fiMpps) %.2fMB %li Pkts (HW:%i Pkts) [lost?:%li] (%.3fM Spins1 %.3fM SpinsP ) %lierrs %lidrp %liswofl %lihwofl\n",
+
+
+        const int MAX_CHARS = 1024;
+        char page_faults_str[MAX_CHARS];
+        int offset = 0;
+        offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "[");
+        for(int wid = 0; wid < bstats_count; wid++)
+        {
+            offset += snprintf(page_faults_str + offset,MAX_CHARS - offset, "%li.%li ", bstats_deltas[wid].majflt, bstats_deltas[wid].minflt );
+        }
+        offset--; //Remove trailing space.
+        offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "] ");
+
+
+        ch_log_info("Listener:%02i %-15s -- %.2fGbps %.2fMpps (HW:%.2fiMpps) %.2fMB %li Pkts (HW:%i Pkts) [lost?:%li] (%.3fM Spins1 %.3fM SpinsP ) %lierrs %lidrp %liswofl %lihwofl Faults:%s\n",
                tid,
                lparams.nic_istream->name,
 
@@ -391,15 +428,29 @@ static void print_lstats(lstats_t lstats_delta, listener_params_t lparams,
                lstats_delta.spinsP_rx / 1000.0 / 1000.0,
 
                lstats_delta.errors, lstats_delta.dropped, lstats_delta.swofl,
-               lstats_delta.hwofl);
+               lstats_delta.hwofl,
+
+               page_faults_str
+
+        );
+
     }
 
 }
 
 
 
-static void print_wstats(wstats_t wstats_delta,writer_params_t wparams, int tid, int64_t delta_ns )
+static void print_wstats(wstats_t wstats_delta,writer_params_t wparams,
+                         bstats_t* bstats_deltas, int64_t bstats_count,
+                         int tid, int64_t delta_ns )
 {
+
+    if(!wparams.disk_ostream->name)
+    {
+        //This writer has been cleaned up
+        return;
+    }
+
     const double w_rate_mpps  = ((double) wstats_delta.packets ) / (delta_ns / 1000.0);
 
     const double w_pcrate_gbs = ((double) wstats_delta.pcbytes * 8) / delta_ns;
@@ -433,16 +484,30 @@ static void print_wstats(wstats_t wstats_delta,writer_params_t wparams, int tid,
     }
     else if(options.more_verbose_lvl == 2)
     {
-        ch_log_info("Writer:%02i %-17s -- %.2fGbps (%.2fGbps wire %.2fGbps disk) %.2fMpps %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins\n",
+
+        const int MAX_CHARS = 1024;
+        char page_faults_str[MAX_CHARS];
+        int offset = 0;
+        offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "[");
+        for(int wid = 0; wid < bstats_count; wid++)
+        {
+            offset += snprintf(page_faults_str + offset,MAX_CHARS - offset, "%li.%li ", bstats_deltas[wid].majflt, bstats_deltas[wid].minflt );
+        }
+        offset--; //Remove trailing space.
+        offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "] ");
+
+
+        ch_log_info("Writer:%02i %-17s -- %.2fGbps %.2fMpps (%.2fGbps wire %.2fGbps disk) %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins Faults:%s\n",
                     tid,
                     pretty,
-                    w_pcrate_gbs, w_plrate_gbs, w_drate_gbs,
-                    w_rate_mpps,
+                    w_pcrate_gbs, w_rate_mpps, w_plrate_gbs, w_drate_gbs,
                     wstats_delta.pcbytes / 1024.0 / 1024.0,
                     wstats_delta.plbytes / 1024.0 / 1024.0,
                     wstats_delta.dbytes / 1024.0 / 1024.0,
                     wstats_delta.packets,
-                    wstats_delta.spins / 1000.0 / 1000.0);
+                    wstats_delta.spins / 1000.0 / 1000.0,
+                    page_faults_str);
+
     }
 }
 
@@ -512,7 +577,7 @@ static void print_wstats_totals(wstats_t wdelta_total, int64_t delta_ns )
     }
     else if(options.more_verbose_lvl == 2)
     {
-        ch_log_info("%-27s -- %.2fGbps (%.2fGbps wire %.2fGbps disk) %.2fMpps %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins\n",
+        ch_log_info("%-27s -- %.2fGbps %.2fMpps (%.2fGbps wire %.2fMGbps disk) %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins\n",
                     "Total - All Writers",
                     w_pcrate_gbs, w_rate_mpps,
                     w_plrate_gbs, w_drate_gbs,
@@ -874,7 +939,7 @@ eio_stream_t* alloc_nic(char* iface, bool use_dummy  )
     else
     {
 
-        ch_log_info("New EIO stream %s\n", iface);
+        ch_log_debug1("New EIO stream %s\n", iface);
         args.type                     = EIO_EXA;
         args.args.exa.interface_rx    = iface;
         args.args.exa.interface_tx    = NULL;
@@ -928,7 +993,6 @@ eio_stream_t* alloc_disk(char* filename, bool use_dummy)
         else
         {
             args.type = EIO_FILE;
-
             args.args.file.filename              = filename;
             args.args.file.read_buff_size        = 0; //We don't read from this stream
             args.args.file.write_buff_size       = write_buff_size;
@@ -1053,7 +1117,7 @@ void allocate_iostreams()
                    disk_idx++)
         {
             const uint64_t ring_idx = nic_idx * disks + disk_idx;
-            ch_log_info("Allocating ring %s:%s (%i:%i) at ring index %i\n",
+            ch_log_debug1("Allocating ring %s:%s (%i:%i) at ring index %i\n",
                         *interface,
                         *filename,
                         nic_idx,
@@ -1073,7 +1137,7 @@ void allocate_iostreams()
             disk_idx++)
     {
 
-        ch_log_info("Allocating disk %s at disk index %i\n", *filename, disk_idx);
+        ch_log_debug1("Allocating disk %s at disk index %i\n", *filename, disk_idx);
 
         disk_ostreams[disk_idx] = alloc_disk( *filename, dummy_disk);
 
@@ -1086,7 +1150,7 @@ void allocate_iostreams()
        {
 
             const int64_t listen_ring_idx = nic_idx * disks + disk_idx;
-            ch_log_info("Getting ring %s:%s (%i:%i) at listener ring index %i ",
+            ch_log_debug1("Getting ring %s:%s (%i:%i) at listener ring index %i\n",
                                    *interface,
                                    *filename,
                                    nic_idx,
@@ -1098,7 +1162,7 @@ void allocate_iostreams()
 
 
             const int64_t writer_ring_idx = disk_idx * nics + nic_idx;
-            ch_log_info("Setting ring %s:%s (%i:%i) at writer ring index %i\n",
+            ch_log_debug1("Setting ring %s:%s (%i:%i) at writer ring index %i\n",
                                    *interface,
                                    *filename,
                                    nic_idx,
@@ -1221,24 +1285,23 @@ int main (int argc, char** argv)
     {
         ch_log_warn("Warning: Sharing listener and writer CPUs is not recommended\n");
     }
-    CPU_ZERO(&cpus_tmp);
-    CPU_AND(&cpus_tmp, &cpus.listeners, &cpus.management);
-    if(CPU_COUNT(&cpus_tmp))
-    {
-        ch_log_warn("Warning: Sharing listener and management CPUs is not recommended\n");
-    }
 
     //Allocate all I/O streams (NICs, Disks and rings to join threads)
     allocate_iostreams();
     CH_VECTOR(pthread)* lthreads = start_listener_threads(cpus.listeners);
     CH_VECTOR(pthread)* wthreads = start_writer_threads(cpus.writers);
 
-    /* Set the management thread CPU core */
-    if (sched_setaffinity (0, sizeof(cpu_set_t), &cpus.management))
+    /* Set the management thread CPU cores. Allow management to run on any
+     * CPU, but not on listener CPU */
+    cpu_set_t cpus_man;
+    CPU_ZERO(&cpus_tmp);
+    for(int i = 0; i < 16; i++) CPU_SET(i,&cpus_man); //Assume no more than 256 cores...
+    CPU_XOR(&cpus_man, &cpus.listeners,&cpus_man); //Invert the listener CPUs
+    if (sched_setaffinity (0, sizeof(cpu_set_t), &cpus_man))
     {
-        ch_log_fatal("Could not set management CPU affinity\n");
+        ch_log_fatal("Could not set management CPUs affinity\n");
     }
-
+    nice(-10); //Stats is lower priority than anything else
     /*************************************************************************/
     /* Main thread - Real work begins here!                                  */
     /*************************************************************************/
@@ -1254,8 +1317,20 @@ int main (int argc, char** argv)
     pstats_t pstats_prev [MAX_LTHREADS] = {{0}};
     pstats_t pstats_now  [MAX_LTHREADS] = {{0}};
 
+    bstats_t bstats_wr_start[MAX_LWCONNS] = {{0}};
+    bstats_t bstats_wr_prev[MAX_LWCONNS]  = {{0}};
+    bstats_t bstats_wr_now[MAX_LWCONNS]   = {{0}};
+
+    bstats_t bstats_rd_start[MAX_LWCONNS] = {{0}};
+    bstats_t bstats_rd_prev[MAX_LWCONNS]  = {{0}};
+    bstats_t bstats_rd_now[MAX_LWCONNS]   = {{0}};
+
+
     pstats_t pempty = {0};
     pstats_t pdelta_total = {0};
+
+    bstats_t bempty = {0};
+    bstats_t bdelta_total = {0};
 
     wstats_t wstats_prev[MAX_WTHREADS] = {{0}};
     wstats_t wstats_now[MAX_LTHREADS] = {{0}};
@@ -1274,6 +1349,26 @@ int main (int argc, char** argv)
     {
         eio_rd_hw_stats(nic_istreams[tid], &pstats_start[tid]);
         pstats_prev[tid] = pstats_start[tid];
+
+        const int64_t rings_count = lparams_list[tid].rings_count;
+        for(int ring = 0; ring < rings_count; ring++){
+            eio_wr_hw_stats(lparams_list[tid].rings[ring],
+                            &bstats_wr_start[tid * rings_count + ring]);
+            bstats_wr_prev[tid * rings_count + ring] =
+                    bstats_wr_start[tid * rings_count + ring];
+        }
+    }
+
+
+    for (int wid = 0; wid < wthreads->count; wid++)
+    {
+        const int64_t rings_count = wparams_list[wid].rings_count;
+        for(int ring = 0; ring < rings_count; ring++){
+            eio_rd_hw_stats(wparams_list[wid].rings[ring].ring_istream,
+                            &bstats_rd_start[wid * rings_count + ring]);
+            bstats_rd_prev[wid * rings_count + ring] =
+                    bstats_rd_start[wid * rings_count + ring];
+        }
     }
 
 
@@ -1312,10 +1407,25 @@ int main (int argc, char** argv)
 
             eio_rd_hw_stats(nic_istreams[tid], &pstats_now[tid]);
             lstats_now[tid] = lstats_all[tid];
+
+            const int64_t rings_count = lparams_list[tid].rings_count;
+            for(int ring = 0; ring < rings_count; ring++){
+                 eio_wr_hw_stats(lparams_list[tid].rings[ring],
+                                 &bstats_wr_now[tid * rings_count + ring]);
+             }
         }
         for (int tid = 0; tid < wthreads->count; tid++)
         {
             wstats_now[tid] = wstats[tid];
+
+            const int64_t rings_count = wparams_list[tid].rings_count;
+            for(int ring = 0; ring < rings_count; ring++){
+                eio_rd_hw_stats(wparams_list[tid].rings[ring].ring_istream,
+                                &bstats_rd_now[tid * rings_count + ring]);
+                bstats_rd_prev[tid * rings_count + ring] =
+                        bstats_rd_now[tid * rings_count + ring];
+            }
+
         }
 
 
@@ -1339,11 +1449,24 @@ int main (int argc, char** argv)
 
             pdelta_total = pstats_add(&pdelta_total, &pstats_delta );
 
+            bstats_t bstats_deltas[MAX_WTHREADS] = {0};
+            bstats_t bstats_totals[MAX_WTHREADS] = {0};
+            const ch_word  wthreads_count = wthreads->count;
+            for(int wid = 0; wid < wthreads_count; wid++)
+            {
+                const int bstats_idx = tid* wthreads_count + wid;
+                bstats_deltas[wid] = bstats_subtract(&bstats_wr_now[bstats_idx],&bstats_wr_prev[bstats_idx]);
+                bstats_totals[wid] = bstats_add(&bstats_totals[wid],&bstats_deltas[wid]);
+                bdelta_total       = bstats_add(&bdelta_total, &bstats_deltas[wid]);
+                bstats_wr_prev[bstats_idx] = bstats_wr_now[bstats_idx];
+            }
+
+
             if(!options.more_verbose_lvl)
                 continue;
 
-            print_lstats(lstats_delta, lparams_list[tid], pstats_delta, tid,
-                         delta_ns);
+            print_lstats(lstats_delta, lparams_list[tid], pstats_delta,
+                         bstats_deltas, wthreads_count, tid, delta_ns);
 
         }
 
@@ -1361,10 +1484,24 @@ int main (int argc, char** argv)
             wstats_t wstats_delta = wstats_subtract(&wstats_now[tid], &wstats_prev[tid]);
             wdelta_total = wstats_add(&wdelta_total, &wstats_delta);
 
+            bstats_t bstats_deltas[MAX_WTHREADS] = {0};
+            bstats_t bstats_totals[MAX_WTHREADS] = {0};
+            const ch_word  wthreads_count = wthreads->count;
+            for(int wid = 0; wid < wthreads_count; wid++)
+            {
+                const int bstats_idx = tid* wthreads_count + wid;
+                bstats_deltas[wid] = bstats_subtract(&bstats_rd_now[bstats_idx],&bstats_rd_prev[bstats_idx]);
+                bstats_totals[wid] = bstats_add(&bstats_totals[wid],&bstats_deltas[wid]);
+                bdelta_total       = bstats_add(&bdelta_total, &bstats_deltas[wid]);
+                bstats_rd_prev[bstats_idx] = bstats_rd_now[bstats_idx];
+            }
+
+
             if(!options.more_verbose_lvl)
                 continue;
 
-            print_wstats(wstats_delta, wparams_list[tid], tid, delta_ns);
+            print_wstats(wstats_delta, wparams_list[tid], bstats_deltas,
+                         wthreads_count, tid, delta_ns);
 
         }
 
@@ -1413,6 +1550,7 @@ int main (int argc, char** argv)
     /* Start processing the listener thread stats */
     ldelta_total = lempty;
     pdelta_total = pempty;
+    bdelta_total = bempty;
     for (int tid = 0; tid < lthreads->count; tid++)
     {
 
@@ -1420,16 +1558,25 @@ int main (int argc, char** argv)
         lstats_t lstats_delta = lstats_subtract(&lstats_now[tid], &lstats_start[tid]);
         ldelta_total = lstats_add(&ldelta_total, &lstats_delta);
 
-        /* The signal handler fills pstats_stop for us*/
-        ch_log_debug1("###<><>### - rx count=%li\n", pstats_stop[tid].rx_count);
         pstats_t pstats_delta = pstats_subtract(&pstats_stop[tid], &pstats_start[tid]);
-
         pdelta_total = pstats_add(&pdelta_total, &pstats_delta);
+
+        bstats_t bstats_deltas[MAX_WTHREADS] = {0};
+        bstats_t bstats_totals[MAX_WTHREADS] = {0};
+        const ch_word  wthreads_count = wthreads->count;
+        for(int wid = 0; wid < wthreads_count; wid++)
+        {
+            const int bstats_idx = tid* wthreads_count + wid;
+            bstats_deltas[wid] = bstats_subtract(&bstats_wr_stop[bstats_idx],&bstats_wr_start[bstats_idx]);
+            bstats_totals[wid] = bstats_add(&bstats_totals[wid],&bstats_deltas[wid]);
+            bdelta_total       = bstats_add(&bdelta_total, &bstats_deltas[wid]);
+        }
 
 
         if(!options.more_verbose_lvl)
             continue;
-        print_lstats(lstats_delta, lparams_list[tid], pstats_delta, tid,  delta_ns);
+
+        print_lstats(lstats_delta, lparams_list[tid], pstats_delta, bstats_deltas, wthreads_count, tid,  delta_ns);
 
     }
 
@@ -1447,7 +1594,21 @@ int main (int argc, char** argv)
         if(!options.more_verbose_lvl)
             continue;
 
-        print_wstats(wstats_delta, wparams_list[tid], tid, delta_ns);
+
+        bstats_t bstats_deltas[MAX_WTHREADS] = {0};
+        bstats_t bstats_totals[MAX_WTHREADS] = {0};
+        const ch_word  wthreads_count = wthreads->count;
+        for(int wid = 0; wid < wthreads_count; wid++)
+        {
+            const int bstats_idx = tid* wthreads_count + wid;
+            bstats_deltas[wid] = bstats_subtract(&bstats_rd_now[bstats_idx],&bstats_rd_prev[bstats_idx]);
+            bstats_totals[wid] = bstats_add(&bstats_totals[wid],&bstats_deltas[wid]);
+            bdelta_total       = bstats_add(&bdelta_total, &bstats_deltas[wid]);
+            bstats_rd_prev[bstats_idx] = bstats_rd_now[bstats_idx];
+        }
+
+        print_wstats(wstats_delta, wparams_list[tid], bstats_deltas,
+                     wthreads_count, tid, delta_ns);
 
     }
 

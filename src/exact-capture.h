@@ -33,7 +33,7 @@
 #define BRING_NAME_LEN (512)
 /*Must be a multiple of disk block size. 512 * 4096 = 2MB */
 #define BRING_SLOT_SIZE (512 * DISK_BLOCK)
-#define BRING_SLOT_COUNT (64)
+#define BRING_SLOT_COUNT (256)
 
 /*Maximum number of input and output threads/cores*/
 #define MAX_WTHREADS   (64)
@@ -62,7 +62,6 @@ typedef struct
     int64_t dbytes;  /* to disk bytes */
     int64_t packets;
     int64_t spins;
-
 } wstats_t  __attribute__( ( aligned ( 8 ) ) );
 
 

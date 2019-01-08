@@ -161,6 +161,61 @@ static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void* stats)
 	return EIO_ENOTIMPL;
 }
 
+#define PICOS_PER_SEC (1000ULL * 1000 * 1000 * 1000)
+#define EXANIC_HPT_TICK_HZ 4000000000
+#define EXANIC_DEFAULT_TICK_HZ 161132800
+static inline void temp_exanic_cycles_to_timespecps(exanic_t *exanic, exanic_cycles_t cycles,
+        struct exanic_timespecps *tsps)
+{
+    /* We know that there are a couple of common/default frequencies in tick_hz,
+        * optimize for those cases while remaining safe for future cases
+        */
+       switch(exanic->tick_hz)
+       {
+           case EXANIC_HPT_TICK_HZ:
+           {
+               tsps->tv_sec  = cycles / EXANIC_HPT_TICK_HZ;
+
+               /* This complicated bit of maths is necessary to avoid overflows
+                * while maintaining precision in the conversion between cycles and
+                * picoseconds */
+               const uint64_t frac_cycles = cycles % EXANIC_HPT_TICK_HZ;
+               tsps->tv_psec = (frac_cycles * (PICOS_PER_SEC / EXANIC_HPT_TICK_HZ))
+                       + (frac_cycles * (PICOS_PER_SEC % EXANIC_HPT_TICK_HZ) /
+                        EXANIC_HPT_TICK_HZ);
+               break;
+           }
+           case EXANIC_DEFAULT_TICK_HZ:
+           {
+
+               tsps->tv_sec  = cycles / EXANIC_DEFAULT_TICK_HZ;
+
+               /* This complicated bit of maths is necessary to avoid overflows
+                * while maintaining precision in the conversion between cycles and
+                * picoseconds */
+               const uint64_t frac_cycles = cycles % EXANIC_DEFAULT_TICK_HZ;
+               tsps->tv_psec = (frac_cycles * (PICOS_PER_SEC /
+                       EXANIC_DEFAULT_TICK_HZ)) + (frac_cycles * (PICOS_PER_SEC %
+                               EXANIC_DEFAULT_TICK_HZ) / EXANIC_DEFAULT_TICK_HZ);
+               break;
+           }
+           default:
+           {
+               tsps->tv_sec  = cycles / exanic->tick_hz;
+
+               /* This complicated bit of maths is necessary to avoid overflows
+                * whilemaintaining precision in the conversion between cycles and
+                * picoseconds */
+               const uint64_t frac_cycles = cycles % exanic->tick_hz;
+               tsps->tv_psec = (frac_cycles * (PICOS_PER_SEC / exanic->tick_hz)) +
+                       (frac_cycles * (PICOS_PER_SEC % exanic->tick_hz) /
+                               exanic->tick_hz);
+           }
+
+       }
+
+}
+
 static eio_error_t exa_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
 {
     exanic_cycles_t* cycles = (exanic_cycles_t*)time;
@@ -168,7 +223,7 @@ static eio_error_t exa_time_to_tsps(eio_stream_t* this, void* time, timespecps_t
 
     iflikely(tsps){
         struct exanic_timespecps exanic_tsps = {0};
-        exanic_cycles_to_timespecps(priv->rx_nic, *cycles, &exanic_tsps);
+        temp_exanic_cycles_to_timespecps(priv->rx_nic, *cycles, &exanic_tsps);
         tsps->secs = exanic_tsps.tv_sec;
         tsps->psecs = exanic_tsps.tv_psec;
     }
@@ -350,10 +405,8 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     this->name = calloc(name_len + 1, 1);
     memcpy(this->name, name, name_len);
 
-
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
-    ch_log_info("Constructing exanic %s\n", args->interface_rx);
     if(interface_rx){
         if(parse_device(interface_rx, priv->rx_dev, &priv->rx_dev_id, &priv->rx_port))
         {
@@ -375,21 +428,21 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
         }
 
         if(clear_buff){
-            fprintf(stderr, "Warning: clearing rx buffer on %s\n", interface_rx);
+            ch_log_warn("Warning: clearing rx buffer on %s\n", interface_rx);
             const size_t rx_buff_sz = 64 * 1024;
             char rx_buff[rx_buff_sz];
             int64_t clear_cnt = -1;
             for(ssize_t err = -1; err != 0; clear_cnt++){
                  err =exanic_receive_frame(priv->rx, rx_buff, rx_buff_sz, NULL);
                  if(err < 0){
-                    fprintf(stderr,"Warning: rx error %li on %s\n", err, interface_rx);
+                     ch_log_warn("Warning: rx error %li on %s\n", err, interface_rx);
                  }
             }
             if(clear_cnt > 0){
-                fprintf(stderr, "Cleared stale packets from rx buffer on %s\n",
+                ch_log_warn("Cleared stale packets from rx buffer on %s\n",
                             interface_rx);
             }
-            fprintf(stderr,"Done clearing rx buffer on %s\n", interface_rx);
+            ch_log_info("Done clearing rx buffer on %s\n", interface_rx);
         }
 
         if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,

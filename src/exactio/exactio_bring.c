@@ -23,6 +23,8 @@
 #include <sys/types.h>
 #include <assert.h>
 #include <sys/shm.h>
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+
 
 
 #include <chaste/chaste.h>
@@ -56,30 +58,30 @@ typedef struct bring_priv {
 
     bool expand;
 
-    char* ring_mem;    //location of the memory region for reads
-    int64_t ring_mem_len;             //length of the read memory region
-    int64_t slots;               //number of slots in the read region
-    int64_t slots_size;          //Size of each slot including the slot header
-    int64_t slot_usr_size;
+    char* ring_mem;             //location of the memory region for reads
+    int64_t ring_mem_len;       //length of the read memory region
+    int64_t slots;              //number of slots in the read region
+    int64_t slots_size;         //Size of each slot including the slot header
+    int64_t slot_usr_size;      //Size of the slot as restured to the user
 
     //Read side variables
-    char* rd_mem;          //Underlying memory to support shared mem transport
-    int64_t rd_sync_counter;        //Synchronization counter to protect against loop around
-    int64_t rd_index;               //Current index receiving data
-
-    //Write side variables
-    char* wr_mem;          //Underlying memory for the shared memory transport
-    int64_t wr_sync_counter;        //Synchronization counter. The assumptions is that this will never wrap around.
-    int64_t wr_index;               //Current slot for sending data
-
-    //These values are returned to users
-    bool writing;
     bool reading;
-
+    int64_t rd_sync_counter;    //Synchronization counter to protect against loop around
+    int64_t rd_index;           //Current index receiving data
     bring_slot_header_t* rd_head;
 
+    //Write side variables
+    bool writing;
+    int64_t wr_sync_counter;    //Synchronization counter. The assumptions is that this will never wrap around.
+    int64_t wr_index;           //Current slot for sending data
     bring_slot_header_t* wr_head;
 
+
+    //Variables for statistics keeping
+    int rd_pid;                 //Linux PID for the read thread, used for stats
+    FILE* rd_proc_stats_f;       //FD for the proc stats file
+    int wr_pid;                 //Linux PID for the write thread, used for stats
+    FILE* wr_proc_stats_f;       //FD for the proc stats file
 
 } bring_priv_t;
 
@@ -97,16 +99,28 @@ static void bring_destroy(eio_stream_t* this)
         return;
     }
 
+    if(priv->rd_proc_stats_f){
+        fclose(priv->rd_proc_stats_f);
+        priv->rd_proc_stats_f = NULL;
+    }
+
+    if(priv->wr_proc_stats_f){
+        fclose(priv->wr_proc_stats_f);
+        priv->wr_proc_stats_f = NULL;
+    }
+
     if(this->fd > -1){
         close(this->fd);
         this->fd = -1; //Make this reentrant safe
     }
+
 
     if(this->name)
     {
         free(this->name);
         this->name = NULL;
     }
+
 
     free(this);
 
@@ -127,6 +141,12 @@ static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, 
     ifassert(priv->reading){ //Release buffer before acquire
         ch_log_fatal( "Error, release buffer before acquiring\n");
         return EIO_ERELEASE;
+    }
+
+    ifunlikely(!priv->rd_pid){
+        pid_t tid;
+        tid = syscall(SYS_gettid);
+        priv->rd_pid = tid;
     }
 
     //ch_log_debug3("Doing read acquire, looking at index=%li/%li\n", priv->rd_index, priv->rd_slots );
@@ -186,7 +206,7 @@ static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
     //We're done. Increment the buffer index and wrap around if necessary -- this is faster than using a modulus (%)
     priv->rd_index++;
     priv->rd_index = priv->rd_index < priv->slots ? priv->rd_index : 0;
-    priv->rd_head = (bring_slot_header_t*)(priv->rd_mem + (priv->slots_size * priv->rd_index));
+    priv->rd_head = (bring_slot_header_t*)(priv->ring_mem + (priv->slots_size * priv->rd_index));
     priv->rd_sync_counter++; //Assume this will never overflow. ~200 years for 1 nsec per op
 
     //Grab time stamp for this operation
@@ -203,12 +223,68 @@ static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void* stats)
 	return EIO_ENOTIMPL;
 }
 
+static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bstats_t* stats)
+{
+    ch_log_debug1("Trying to read stats on pid = %i with fd=%p\n", *pid, *proc_stats_fp);
+    ifunlikely(!*pid){
+        return EIO_ETRYAGAIN; //Nobody has called read aquire in the read thread
+    }
+
+    ifunlikely(!*proc_stats_fp){
+        ch_log_debug1("Proc FD does not exist, allocating\n");
+
+        int len = snprintf(NULL, 0, "/proc/%d/stat", *pid);
+        char* proc_stat_file_path = calloc(len+1,1);
+        if(!proc_stat_file_path){
+            return EIO_ENOMEM;
+        }
+        snprintf(proc_stat_file_path, len+1, "/proc/%d/stat", *pid);
+
+
+        ch_log_debug1("Opening \"%s\"\n", proc_stat_file_path);
+        *proc_stats_fp = fopen(proc_stat_file_path,"r");
+
+        if(*proc_stats_fp ==  NULL){
+            ch_log_error("Could not open %s with error %s\n",
+                         proc_stat_file_path, strerror(errno));
+            *pid = 0;
+            free(proc_stat_file_path);
+            return EIO_EINVALID;
+        }
+
+        free(proc_stat_file_path);
+    }
+
+    fseek(*proc_stats_fp,0,0);
+
+    int err = 0;
+    err = fscanf(*proc_stats_fp,"%d %s %c %d %d %d %d %d %u %li %li %li %li %li %li",
+                 &stats->pid, stats->comm, &stats->state, &stats->ppid, &stats->pgrp,
+                 &stats->session, &stats->tty_nr, &stats->tpgid, &stats->flags,
+                 &stats->minflt, &stats->cmajflt, &stats->majflt, &stats->cmajflt,
+                 &stats->utime, &stats->stime);
+
+    ch_log_debug1("pid=%i majflt=%li minflt=%li\n", pid, stats->majflt, stats->minflt);
+
+    if(err == EOF){
+        ch_log_error("Error reading proc/stats\n");
+        *pid = 0;
+        fclose(*proc_stats_fp);
+        *proc_stats_fp = NULL;
+        return EIO_EEOF;
+    }
+
+    return EIO_ENONE;
+
+}
+
+
+
+
 static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
 {
-    (void)this;
-    (void)stats;
-
-	return EIO_ENOTIMPL;
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    return bring_hw_stats(&priv->rd_pid, &priv->rd_proc_stats_f, stats);
 }
 
 
@@ -232,6 +308,12 @@ static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer,
     ifassert(priv->writing){
         ch_log_fatal("Call release before calling acquire\n");
         return EIO_ERELEASE;
+    }
+
+    ifunlikely(!priv->wr_pid){
+       pid_t tid;
+       tid = syscall(SYS_gettid);
+       priv->wr_pid = tid;
     }
 
     //Is there a new slot ready for writing?
@@ -303,7 +385,7 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
     //Increment and wrap around if necessary, this is faster than a modulus
     priv->wr_index++;
     priv->wr_index = priv->wr_index < priv->slots ? priv->wr_index : 0;
-    priv->wr_head = (bring_slot_header_t*)(priv->wr_mem + (priv->slots_size * priv->wr_index));
+    priv->wr_head = (bring_slot_header_t*)(priv->ring_mem + (priv->slots_size * priv->wr_index));
     priv->writing = false;
 
     (void)ts;
@@ -321,10 +403,8 @@ static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void* stats)
 
 static inline eio_error_t bring_write_hw_stats(eio_stream_t* this, void* stats)
 {
-    (void)this;
-    (void)stats;
-
-	return EIO_ENOTIMPL;
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    return bring_hw_stats(&priv->wr_pid, &priv->wr_proc_stats_f, stats);
 }
 
 
@@ -367,6 +447,7 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     // MAP_HUGETLB - Use huge TBL entries to minimize page faults at runtime.
     //
     void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_LOCKED | MAP_HUGETLB | MAP_POPULATE, -1, 0);
+    //void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(mem == MAP_FAILED){
         ch_log_error("Could not create memory for bring \"%s\". Error=%s\n",  this->name, strerror(errno));
         result = EIO_EINVALID;
@@ -459,10 +540,8 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     int64_t err = EIO_ETRYAGAIN;
     err = eio_bring_allocate(this);
     if(!err){
-        priv->rd_mem  = (char*)priv->ring_mem;
-        priv->wr_mem  = (char*)priv->ring_mem;
-        priv->rd_head = (bring_slot_header_t*)priv->rd_mem;
-        priv->wr_head = (bring_slot_header_t*)priv->wr_mem;
+        priv->rd_head = (bring_slot_header_t*)priv->ring_mem;
+        priv->wr_head = (bring_slot_header_t*)priv->ring_mem;
     }
 
     return err;

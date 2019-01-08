@@ -2,7 +2,7 @@ PREFIX=/usr/local
 CC=cc
 INCLUDES=-Ilibs -Isrc -I.
 LDFLAGS=libs/libchaste/libchaste.a
-GLOBAL_CFLAGS=-g -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -fPIC -Wno-missing-field-initializers -Wno-missing-braces
+GLOBAL_CFLAGS=-g -g3 -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -fPIC -Wno-missing-field-initializers -Wno-missing-braces
 RELEASE_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -O3 -Wall -DNDEBUG -DNOIFASSERT
 ASSERT_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -O3 -Wall -DNDEBUG
 DEBUG_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -Werror -Wall -Wextra -pedantic
@@ -23,8 +23,8 @@ debug: $(BIN)
 
 bin/exact-capture: $(EXACTCAP_SRCS) $(EXACTCAP_HDRS) $(LIBCASHTE_HDRS) 	
 	mkdir -p bin
-	$(CC) $(CFLAGS) $(EXACTCAP_SRCS) $(LDFLAGS) -lm -lexanic -lpthread -lrt -o $@ 
-
+	$(CC) $(CFLAGS) $(EXACTCAP_SRCS) $(LDFLAGS) -lm -lexanic -lpthread -lrt -o $@
+	
 bin/exact-pcap-parse: utils/exact-pcap-parse.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	mkdir -p bin
 	$(CC) $(CFLAGS) utils/exact-pcap-parse.c $(LDFLAGS) -o $@ 
