@@ -12,12 +12,12 @@
  */
 
 
-#include "exact-capture-writer.h"
-#include "data_structs/expcap.h"
-
 #include <netinet/ip.h>
 #include <limits.h>
+#include <errno.h>
 
+#include "exact-capture-writer.h"
+#include "data_structs/expcap.h"
 
 extern volatile bool wstop;
 extern const bool nsec_pcap;
@@ -105,7 +105,13 @@ void* writer_thread (void* params)
 
     writer_params_t* wparams = params;
     ch_log_debug1("Starting writer thread for %s\n", wparams->disk_ostream->name);
-    nice(-15); //Raise this thread prioirty
+    //Raise this thread prioirty
+    if(nice(-15) < 0)
+    {
+        ch_log_warn("Failed to change thread priority."
+                       "Performance my be affected! (%s)\n", strerror(errno));
+    }
+
 
     ring_istream_t* rings = wparams->rings;
     int64_t rings_count   = wparams->rings_count;

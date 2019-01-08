@@ -16,6 +16,7 @@
  *  the listener inserts "dummy" packets to pad out to 4K whenever it syncs to
  *  the writer.
  */
+#include <errno.h>
 
 #include "exact-capture-listener.h"
 #include "data_structs/expcap.h"
@@ -395,7 +396,12 @@ void* listener_thread (void* params)
     ch_log_debug1("Creating exanic listener thread id=%li on interface=%s\n",
                     lparams->ltid, lparams->nic_istream->name);
 
-    nice(-20); //Raise this thread prioirty
+    //Raise this thread prioirty
+    if(nice(-20) < 0)
+    {
+        ch_log_warn("Failed to change thread priority."
+                       "Performance my be affected! (%s)\n", strerror(errno));
+    }
     /*
      * Set up a dummy packet to pad out extra space when needed
      * dummy packet areas are per thread to avoid falsely sharing memory

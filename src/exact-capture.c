@@ -18,6 +18,7 @@
 #include <sys/mman.h>
 #include <stdbool.h>
 #include <time.h>
+#include <errno.h>
 
 #include <exanic/port.h>
 
@@ -1307,7 +1308,12 @@ int main (int argc, char** argv)
     {
         ch_log_fatal("Could not set management CPUs affinity\n");
     }
-    nice(-10); //Stats is lower priority than anything else
+    if(nice(-10) < 0)
+    {
+        ch_log_warn("Failed to change thread priority."
+                       "Performance my be affected! (%s)\n", strerror(errno));
+    }
+
     /*************************************************************************/
     /* Main thread - Real work begins here!                                  */
     /*************************************************************************/
