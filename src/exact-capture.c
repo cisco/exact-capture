@@ -42,7 +42,7 @@
 #include "exactio/exactio_bring.h"
 
 #define EXACT_MAJOR_VER 1
-#define EXACT_MINOR_VER 0
+#define EXACT_MINOR_VER 1
 #define EXACT_VER_TEXT ""
 
 
