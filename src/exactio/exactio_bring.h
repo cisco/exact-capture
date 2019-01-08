@@ -19,6 +19,8 @@ typedef struct  {
     uint64_t slot_count;
     uint64_t dontexpand;
     char* name;
+    int64_t id_major;
+    int64_t id_minor;
 } bring_args_t;
 
 

@@ -32,6 +32,8 @@ typedef struct  {
     uint64_t expcap_bytes;
     uint64_t exanic_pkt_bytes;
     char* name;
+    int64_t id_major;
+    int64_t id_minor;
 } dummy_args_t;
 
 

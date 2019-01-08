@@ -83,6 +83,9 @@ typedef struct bring_priv {
     int wr_pid;                 //Linux PID for the write thread, used for stats
     FILE* wr_proc_stats_f;       //FD for the proc stats file
 
+    int64_t id_major;
+    int64_t id_minor;
+
 } bring_priv_t;
 
 static void bring_destroy(eio_stream_t* this)
@@ -509,6 +512,21 @@ static eio_error_t bring_time_to_tsps(eio_stream_t* this, void* time, timespecps
 }
 
 
+static eio_error_t bring_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
+{
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+
+    ifassert(!id_major || !id_minor){
+        return EIO_EINVALID;
+    }
+
+    *id_major = priv->id_major;
+    *id_minor = priv->id_minor;
+
+    return EIO_ENONE;
+}
+
 /*
  * Arguments
  * [0] filename
@@ -522,6 +540,8 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     const uint64_t slot_size   = args->slot_size;
     const uint64_t slot_count  = args->slot_count;
     const uint64_t dontexpand  = args->dontexpand;
+    const int64_t id_major     = args->id_major;
+    const int64_t id_minor     = args->id_minor;
     const char* name           = args->name;
     const int64_t name_len = strnlen(name, 1024);
     this->name = calloc(name_len + 1, 1);
@@ -534,6 +554,8 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     priv->slot_size  = slot_size;
     priv->eof        = 0;
     priv->expand     = !dontexpand;
+    priv->id_major   = id_major;
+    priv->id_minor   = id_minor;
     priv->rd_sync_counter = 1; //This will be the first valid value
 
 

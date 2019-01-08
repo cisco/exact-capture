@@ -229,7 +229,20 @@ static eio_error_t exa_time_to_tsps(eio_stream_t* this, void* time, timespecps_t
     }
 
     return EIO_ENONE;
+}
 
+static eio_error_t exa_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
+{
+    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    ifassert(!id_major || !id_minor){
+        return EIO_EINVALID;
+    }
+
+    *id_major = priv->id_major;
+    *id_minor = priv->id_minor;
+
+    return EIO_ENONE;
 }
 
 
@@ -380,7 +393,6 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
 }
 
 
-
 /*
  * Arguments
  * [0] filename
@@ -414,6 +426,9 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
                      interface_rx);
             return 1;
         }
+
+        priv->id_major = priv->rx_dev_id;
+        priv->id_minor = priv->rx_port;
 
         priv->rx_nic = exanic_acquire_handle(priv->rx_dev);
         if (!priv->rx_nic){

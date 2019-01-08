@@ -84,11 +84,11 @@ typedef struct exactio_stream_interface_s{
     eio_error_t (*write_sw_stats)(eio_stream_t* this,void* stats);
     eio_error_t (*write_hw_stats)(eio_stream_t* this,void* stats);
 
-    //Ancillary Operations
+    //Auxilary Operations
     //----------------
     //Convert internal timestamp representation to a picosecond times specification
     eio_error_t (*time_to_tsps)(eio_stream_t* this, void* time, timespecps_t* ts );
-
+    eio_error_t (*get_id)(eio_stream_t* this, int64_t* id_major, int64_t* id_minor );
 
 } exactio_stream_interface_t;
 
@@ -134,6 +134,7 @@ struct exactio_stream_s {
 			.write_sw_stats = NAME##_write_sw_stats,\
 			.write_hw_stats = NAME##_write_hw_stats,\
 			.time_to_tsps   = NAME##_time_to_tsps,\
+			.get_id   	    = NAME##_get_id,\
             .destroy        = NAME##_destroy,\
     };\
     \

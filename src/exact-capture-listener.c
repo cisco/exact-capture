@@ -26,8 +26,8 @@ extern int64_t max_pkt_len;
 extern int64_t min_pcap_rec;
 extern int64_t max_pcap_rec;
 
-static __thread int dev_id;
-static __thread int port_id;
+static __thread int64_t dev_id;
+static __thread int64_t port_id;
 static __thread lstats_t* lstats;
 
 /*Assumes there there never more than 64 listener threads!*/
@@ -406,6 +406,7 @@ void* listener_thread (void* params)
     const int64_t ltid = lparams->ltid; /* Listener thread id */
 
     /* Thread local storage parameters */
+    eio_get_id(lparams->nic_istream, &dev_id, &port_id);
     lstats  = &lstats_all[ltid];
 
     eio_stream_t** rings = lparams->rings;

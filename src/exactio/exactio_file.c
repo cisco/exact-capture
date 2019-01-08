@@ -507,7 +507,16 @@ static eio_error_t file_time_to_tsps(eio_stream_t* this, void* time, timespecps_
 }
 
 
+static eio_error_t file_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
+{
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
+    (void)priv;
+    (void)id_major;
+    (void)id_minor;
+
+    return EIO_ENOTIMPL;
+}
 
 
 

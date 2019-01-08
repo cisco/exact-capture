@@ -1010,7 +1010,8 @@ eio_stream_t* alloc_disk(char* filename, bool use_dummy)
 
 
 
-eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname)
+eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
+                         int64_t id_major, int64_t id_minor)
 {
     eio_args_t args = {0};
     bzero(&args,sizeof(args));
@@ -1025,7 +1026,9 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname)
         args.args.dummy.read_buff_size  = BRING_SLOT_SIZE;
         args.args.dummy.rd_mode         = DUMMY_MODE_EXPCAP;
         args.args.dummy.expcap_bytes    = 512;
-        args.args.dummy.name = calloc(1,namelen + 1);
+        args.args.dummy.name            = calloc(1,namelen + 1);
+        args.args.dummy.id_major        = id_major;
+        args.args.dummy.id_minor        = id_minor;
         snprintf(args.args.dummy.name, 128, "%s:%s", iface, fname);
 
         ch_log_debug1("Creating dummy ring %s with write_size=%li, read_sizet=%li\n",
@@ -1047,7 +1050,10 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname)
         /* This must be a multiple of the disk block size (assume 4kB)*/
         args.args.bring.slot_size  = BRING_SLOT_SIZE;
         args.args.bring.slot_count = BRING_SLOT_COUNT;
-        args.args.bring.name = calloc(1,namelen + 1);
+        args.args.bring.name       = calloc(1,namelen + 1);
+        args.args.bring.id_major   = id_major;
+        args.args.bring.id_minor   = id_minor;
+
         snprintf(args.args.bring.name, 128, "%s:%s", iface, fname);
 
         ch_log_debug1("Creating ring %s with slots=%li, slot_count=%li\n",
@@ -1124,7 +1130,7 @@ void allocate_iostreams()
                         disk_idx,
                         ring_idx);
 
-            ring_ostreams[ring_idx] = alloc_ring(dummy_ring, *interface, *filename);
+            ring_ostreams[ring_idx] = alloc_ring(dummy_ring, *interface, *filename, nic_idx, disk_idx);
         }
 
     }
