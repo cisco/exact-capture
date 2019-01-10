@@ -1,5 +1,16 @@
 #! /usr/bin/python
 
+#
+# Copyright (c) 2017,2018,2019 All rights reserved.
+# See LICENSE.txt for full details.
+# 
+#  Created:     28 Jul 2017
+#  Author:      Matthew P. Grosvenor
+#  Description: A tool for parsing and summarising the output of pcap-match
+#
+ 
+
+
 import sys
 import os
 import numpy

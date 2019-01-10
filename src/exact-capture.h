@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     4 Aug 2017
@@ -51,18 +51,9 @@ typedef struct
     int64_t bytes_rx;
     int64_t packets_rx;
 
-} lstats_t  __attribute__( ( aligned ( 8 ) ) );
+} listen_stats_t  __attribute__( ( aligned ( 8 ) ) );
 
 
-
-typedef struct
-{
-    int64_t pcbytes; /* capture packet bytes */
-    int64_t plbytes; /* wire length packet bytes */
-    int64_t dbytes;  /* to disk bytes */
-    int64_t packets;
-    int64_t spins;
-} wstats_t  __attribute__( ( aligned ( 8 ) ) );
 
 
 

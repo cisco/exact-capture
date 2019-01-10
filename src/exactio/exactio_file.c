@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -48,7 +48,6 @@ typedef enum {
 
 typedef struct file_priv {
     int fd;
-    char* filename;
     bool eof;
     bool closed;
     bool reading;
@@ -76,6 +75,9 @@ typedef struct file_priv {
     int notify_fd;
     int watch_descr;
     int watch_descr_delete;
+
+    file_stats_sw_rdwr_t stats_sw_rd;
+    file_stats_sw_rdwr_t stats_sw_wr;
 
 } file_priv_t;
 
@@ -201,7 +203,7 @@ static int file_open(eio_stream_t* this, bool allow_open_error)
 
 
 //Read operations
-static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts )
+static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz )
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ifunlikely(priv->closed){
@@ -312,12 +314,16 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
     priv->reading = true;
     *buffer = priv->read_buff;
     *len    = read_result;
-    eio_nowns(ts);
+    priv->stats_sw_rd.bytes += *len;
+    priv->stats_sw_rd.count++;
+
+    (void)ts;
+    (void)ts_hz;
 
     return EIO_ENONE;
 }
 
-static eio_error_t file_read_release(eio_stream_t* this, int64_t* ts)
+static eio_error_t file_read_release(eio_stream_t* this)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ifassert(!priv->reading){
@@ -327,7 +333,6 @@ static eio_error_t file_read_release(eio_stream_t* this, int64_t* ts)
 
     priv->reading = false;
 
-    eio_nowns(ts);
     //Nothing to do here;
     return EIO_ENONE;
 }
@@ -351,7 +356,7 @@ static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void* stats)
 
 
 //Write operations
-static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
+static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t* len)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -391,13 +396,12 @@ static eio_error_t file_write_acquire(eio_stream_t* this, char** buffer, int64_t
     }
 
     priv->writing = true;
-    eio_nowns(ts);
 
     return EIO_ENONE;
 }
 
 
-static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* ts)
+static eio_error_t file_write_release(eio_stream_t* this, int64_t len)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -423,7 +427,6 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
 
     if(len == 0){
         priv->writing = false;
-        eio_nowns(ts);
         return EIO_ENONE;
     }
 
@@ -462,27 +465,57 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len, int64_t* 
         ch_log_debug2("Trying to write %liB at offset %li = %p\n", len -bytes_written, bytes_written, buff + bytes_written);
         const ssize_t result = write(priv->fd,buff + bytes_written,len-bytes_written);
         ifunlikely(result > 0 && result < len){
-            ch_log_error("Only wrote %li / %li\n", result, len);
+            ch_log_warn("Only wrote %li / %li, trying again\n", result, len);
         }
         ifunlikely(result < 0){
             ch_log_error("Unexpected error writing to file \"%s\". Error=%s\n", this->name, strerror(errno));
             file_destroy(this);
             return EIO_ECLOSED;
         }
+        priv->stats_sw_wr.bytes += result;
+        priv->stats_sw_wr.count++;
         bytes_written += result;
         priv->total_bytes_written += result;
     }
 
     priv->writing = false;
-    eio_nowns(ts);
+
     return EIO_ENONE;
 }
 
 
 static inline eio_error_t file_write_sw_stats(eio_stream_t* this, void* stats)
 {
-    (void)this;
-    (void)stats;
+    ch_log_debug1("Trying to get stats on file %s\n", this->name);
+
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    if(priv->closed)
+    {
+        ch_log_warn("Getting stats for closed file\n");
+        return EIO_ECLOSED;
+    }
+
+    file_stats_sw_rdwr_t* stats_sw_wr = (file_stats_sw_rdwr_t*)stats;
+    *stats_sw_wr = priv->stats_sw_wr;
+
+    const int statsstr_len = sizeof(stats_sw_wr->name);
+    const int filename_len = strlen(this->name);
+
+    ch_log_debug2("filenmae len=%i, bufferlen=%i\n", filename_len, statsstr_len );
+
+    bzero(stats_sw_wr->name, statsstr_len);
+
+    int offset = 0;
+    if(filename_len > statsstr_len -1)
+    {
+        stats_sw_wr->name[0] = '.';
+        stats_sw_wr->name[1] = '.';
+        stats_sw_wr->name[2] = '.';
+        offset = filename_len - statsstr_len + 1;
+
+    }
+
+    strncpy(&stats_sw_wr->name[3],this->name + offset, statsstr_len -1);
 
 	return EIO_ENOTIMPL;
 }
@@ -495,16 +528,6 @@ static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void* stats)
 	return EIO_ENOTIMPL;
 }
 
-
-static eio_error_t file_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
-{
-    (void)this;
-    (void)time;
-    (void)tsps;
-
-
-    return EIO_ENOTIMPL;
-}
 
 
 static eio_error_t file_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     4 Aug 2017
@@ -27,9 +27,7 @@
 #include <chaste/log/log.h>
 #include <chaste/timing/timestamp.h>
 
-#include "data_structs/pthread_vec.h"
-#include "data_structs/eiostream_vec.h"
-#include "data_structs/pcap-structures.h"
+
 
 #include "exactio/exactio.h"
 #include "exactio/exactio_exanic.h"
@@ -45,8 +43,10 @@ typedef struct
 
     eio_stream_t** rings;
     int64_t rings_count;
+    int64_t snaplen;
+    listen_stats_t stats;
 
-} listener_params_t;
+} lparams_t;
 
 
 void* listener_thread (void* params);

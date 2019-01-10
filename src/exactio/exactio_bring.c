@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -79,9 +79,11 @@ typedef struct bring_priv {
 
     //Variables for statistics keeping
     int rd_pid;                 //Linux PID for the read thread, used for stats
-    FILE* rd_proc_stats_f;       //FD for the proc stats file
+    FILE* rd_proc_stats_f;      //FD for the proc stats file
     int wr_pid;                 //Linux PID for the write thread, used for stats
-    FILE* wr_proc_stats_f;       //FD for the proc stats file
+    FILE* wr_proc_stats_f;      //FD for the proc stats file
+    bring_stats_sw_t stats_sw_rd; //Software based statistics for read side
+    bring_stats_sw_t stats_sw_wr; //Software based statistics for write side
 
     int64_t id_major;
     int64_t id_minor;
@@ -133,7 +135,7 @@ static void bring_destroy(eio_stream_t* this)
 
 
 //Read operations
-static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, int64_t* len,  int64_t* ts)
+static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, int64_t* len,  int64_t* ts, int64_t* ts_hz)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ifassert(priv->closed){
@@ -172,23 +174,25 @@ static inline eio_error_t bring_read_acquire(eio_stream_t* this, char** buffer, 
     //This path is actually very likely, but we want to preference the alternative path
     ifunlikely( (volatile int64_t)curr_slot_head->seq_no < priv->rd_sync_counter){
         //ch_log_debug3( "Nothing yet to read, slot has not yet been updated\n");
+        priv->stats_sw_rd.aq_miss++;
         return EIO_ETRYAGAIN;
     }
     //If we get here, the slot number is ready for reading, look it up
 
-    //Grab a timestamp as soon as we know there is data
     (void)ts;
-    //eio_nowns(ts);
+    (void)ts_hz;
 
     ch_log_debug2("Got a valid slot seq=%li (%li/%li)\n", curr_slot_head->seq_no, priv->rd_index, priv->slots);
     *buffer = (char*)(curr_slot_head + 1);
     *len    = curr_slot_head->data_size;
+    priv->stats_sw_rd.aq_hit++;
+    priv->stats_sw_rd.aq_bytes += *len;
 
     priv->reading = true;
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
+static inline eio_error_t bring_read_release(eio_stream_t* this)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ifassert(!priv->reading){
@@ -197,6 +201,7 @@ static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
     }
 
     const bring_slot_header_t * curr_slot_head = priv->rd_head;
+    priv->stats_sw_rd.rl_bytes += curr_slot_head->data_size;
 
     //Apply an atomic update to tell the write end that we received this data
     //Do a word aligned single word write (atomic)
@@ -212,23 +217,21 @@ static inline eio_error_t bring_read_release(eio_stream_t* this,  int64_t* ts)
     priv->rd_head = (bring_slot_header_t*)(priv->ring_mem + (priv->slots_size * priv->rd_index));
     priv->rd_sync_counter++; //Assume this will never overflow. ~200 years for 1 nsec per op
 
-    //Grab time stamp for this operation
-    (void)ts;
-    //eio_nowns(ts);
+
     return EIO_ENONE;
 }
 
 static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void* stats)
 {
-    (void)this;
-    (void)stats;
-
-	return EIO_ENOTIMPL;
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
+    *bstats_sw = priv->stats_sw_rd;
+	return EIO_ENONE;
 }
 
-static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bstats_t* stats)
+static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_stats_hw_t* stats)
 {
-    ch_log_debug1("Trying to read stats on pid = %i with fd=%p\n", *pid, *proc_stats_fp);
+    ch_log_debug1("Trying to read bring hw stats on pid = %i with fd=%p\n", *pid, *proc_stats_fp);
     ifunlikely(!*pid){
         return EIO_ETRYAGAIN; //Nobody has called read aquire in the read thread
     }
@@ -267,7 +270,6 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bstats_
                  &stats->minflt, &stats->cmajflt, &stats->majflt, &stats->cmajflt,
                  &stats->utime, &stats->stime);
 
-    ch_log_debug1("pid=%i majflt=%li minflt=%li\n", pid, stats->majflt, stats->minflt);
 
     if(err == EOF){
         ch_log_error("Error reading proc/stats\n");
@@ -282,8 +284,6 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bstats_
 }
 
 
-
-
 static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
@@ -293,7 +293,7 @@ static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
 
 
 //Write operations
-static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer, int64_t* len,  int64_t* ts)
+static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer, int64_t* len)
 {
     //ch_log_debug3("Doing write acquire\n");
 
@@ -326,25 +326,28 @@ static inline eio_error_t bring_write_acquire(eio_stream_t* this, char** buffer,
     //ch_log_debug3("Doing write acquire, looking at %p index=%li, curreslot seq=%li\n",  hdr_mem, priv->wr_index,  curr_slot_head.seq_no);
     //This is actually a very likely path, but we want to preference the path when there is a slot
     ifunlikely( (volatile int64_t)curr_slot_head->seq_no != 0x00ULL){
+        priv->stats_sw_wr.aq_miss++;
         return EIO_ETRYAGAIN;
     }
+
+    priv->stats_sw_wr.aq_hit++;
 
     ifassert(*len > priv->slot_usr_size){
         return EIO_ETOOBIG;
     }
 
     //We're all good. A buffer is ready and waiting to to be acquired
-    (void)ts;
-    //eio_nowns(ts);
     *buffer = (char*)(curr_slot_head + 1);
     *len    = priv->slot_usr_size;
+    priv->stats_sw_wr.aq_bytes += *len;
+
     priv->writing = true;
 
     ch_log_debug3(" Write acquire success - new buffer of size %li at %p (index=%li/%li)\n",   *len, *buffer, priv->wr_index, priv->slots);
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  int64_t* ts)
+static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len)
 {
     ch_log_debug2("Doing write release %li\n", len); //WTF?
 
@@ -366,7 +369,6 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
     //Abort sending
     ifunlikely(len == 0){
         priv->writing = false;
-        eio_nowns(ts);
         return EIO_ENONE;
     }
 
@@ -389,19 +391,20 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len,  
     priv->wr_index++;
     priv->wr_index = priv->wr_index < priv->slots ? priv->wr_index : 0;
     priv->wr_head = (bring_slot_header_t*)(priv->ring_mem + (priv->slots_size * priv->wr_index));
+    priv->stats_sw_wr.rl_bytes += len;
+
     priv->writing = false;
 
-    (void)ts;
-    //eio_nowns(ts);
     return EIO_ENONE;
 }
 
 static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void* stats)
 {
-    (void)this;
-    (void)stats;
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
+    *bstats_sw = priv->stats_sw_wr;
 
-	return EIO_ENOTIMPL;
+    return EIO_ENONE;
 }
 
 static inline eio_error_t bring_write_hw_stats(eio_stream_t* this, void* stats)
@@ -467,9 +470,11 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
 
     //Pin the pages so that they don't get swapped out
     if(mlock(mem,ring_mem_len)){
+        //ch_log_warn("Could not lock memory map. Error=%s\n",   strerror(errno));
         ch_log_fatal("Could not lock memory map. Error=%s\n",   strerror(errno));
         result = EIO_EINVALID;
         goto error_unmap;
+
     }
 
     //Populate all the right values
@@ -500,15 +505,6 @@ error_unmap:
 error_no_cleanup:
     return result;
 
-}
-
-static eio_error_t bring_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
-{
-    (void)this;
-    (void)time;
-    (void)tsps;
-
-    return EIO_ENOTIMPL;
 }
 
 

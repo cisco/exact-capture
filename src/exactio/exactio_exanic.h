@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -32,6 +32,7 @@ typedef struct  {
     bool promisc;
     bool kernel_bypass;
     bool clear_buff;
+    int64_t snaplen; //This is not supported but should be in the future
 } exa_args_t;
 
 NEW_IOSTREAM_DECLARE(exa,exa_args_t);
@@ -66,128 +67,22 @@ typedef struct exa_priv {
 
     bool closed;
 
+    uint32_t tick_hz;
+
     int64_t id_major;
     int64_t id_minor;
 
 } exa_priv_t;
 
 
-//Read operations
-static inline eio_error_t exa_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts )
+typedef struct nic_stats_hw
 {
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    ifassert(priv->closed){
-        return EIO_ECLOSED;
-    }
-
-    ifassert((ssize_t)priv->rx_buffer){
-        return EIO_ERELEASE;
-    }
-
-    struct rx_chunk_info info = {.frame_status =0};
-    priv->rx_len = exanic_receive_chunk_inplace_ex(
-            priv->rx,&priv->rx_buffer,&priv->chunk_id,&priv->more_rx_chunks,
-            &info);
-
-    ssize_t frame_error = -(info.frame_status & EXANIC_RX_FRAME_ERROR_MASK);
-    ifunlikely(priv->rx_len < 0){
-        frame_error = -EXANIC_RX_FRAME_SWOVFL;
-    }
-
-    ifunlikely(frame_error){
-        switch(frame_error){
-            //These are unrecoverable errors, so exit now.
-            //Translate between ExaNIC error codes and EIO codes
-            case -EXANIC_RX_FRAME_SWOVFL:  return EIO_ESWOVFL;
-            case -EXANIC_RX_FRAME_HWOVFL:  return EIO_EHWOVFL;
-        }
-    }
-
-    //This is a very likely path, but we want to optimise the data path
-    ifunlikely(priv->rx_len == 0){
-        return EIO_ETRYAGAIN;
-    }
-
-    //The user doesn't want this chunk, and therefore the whole frame, skip it
-    ifunlikely(buffer == NULL || len == NULL){
-        iflikely(priv->more_rx_chunks){
-            int err = exanic_receive_abort(priv->rx);
-            ifunlikely( err == -EXANIC_RX_FRAME_SWOVFL){
-                return EIO_ESWOVFL;
-            }
-        }
-        return EIO_ENONE;
-    }
-
-
-    iflikely((ssize_t)ts){
-        const exanic_cycles32_t ts32 = exanic_receive_chunk_timestamp(priv->rx, priv->chunk_id);
-        const exanic_cycles_t ts64 = exanic_expand_timestamp(priv->rx_nic,ts32);
-//        struct exanic_timespecps tsps;
-//        exanic_cycles_to_timespecps(priv->rx_nic, ts64, &tsps);
-        //These two timespecps structures look the same but come from different
-        //names-spaces. Making the copy explicit here just to be safe
-        //ts->tv_sec  = tsps.tv_sec;
-        *ts = ts64; //tsps.tv_psec;
-    }
-
-    //All good! Successful "read"!
-    *buffer = priv->rx_buffer;
-    *len    = priv->rx_len;
-
-    switch(frame_error){
-        case -EXANIC_RX_FRAME_CORRUPT: return EIO_EFRAG_CPT;
-        case -EXANIC_RX_FRAME_ABORTED: return EIO_EFRAG_ABT;
-        default:
-            iflikely(priv->more_rx_chunks) return EIO_EFRAG_MOR;
-           return EIO_ENONE;
-    }
-}
-
-
-
-
-static inline eio_error_t exa_read_release(eio_stream_t* this, int64_t* ts)
-{
-    eio_error_t result = EIO_ENONE;
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-
-
-    ifassert(!priv->rx_buffer){
-        return EIO_ERELEASE;
-    }
-
-    ifunlikely(exanic_receive_chunk_recheck(priv->rx, priv->chunk_id) == 0){
-        result = EIO_ESWOVFL;
-    }
-
-    priv->rx_buffer = NULL;
-    (void)ts;
-    //eio_nowns(ts);
-
-    //Nothing to do here;
-    return result;
-}
-
-static inline eio_error_t exa_read_sw_stats(eio_stream_t* this, void* stats)
-{
-    (void)this;
-    (void)stats;
-	return EIO_ENOTIMPL;
-}
-
-static inline eio_error_t exa_read_hw_stats(eio_stream_t* this, void* stats)
-{
-	exanic_port_stats_t* port_stats = (exanic_port_stats_t*)stats;
-	exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-
-	ch_log_debug1("Getting port stats on nic %s port %i\n", this->name, priv->rx_port);
-	int err = exanic_get_port_stats(priv->rx_nic,
-			priv->rx_port,
-			port_stats);
-
-	return err;
-}
-
+    uint32_t tx_count;
+    uint32_t rx_count;
+    uint32_t rx_ignored_count;
+    uint32_t rx_error_count;
+    uint32_t rx_dropped_count;
+    char name[16];
+} nic_stats_hw_t;
 
 #endif /* EXACTIO_EXA_H_ */

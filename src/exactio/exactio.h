@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details. 
  * 
  *  Created:     19 Jun 2017
@@ -57,14 +57,14 @@ void eio_des(eio_stream_t* this);
  * compiled inline */
 
 //Read operations
-static inline eio_error_t eio_rd_acq(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts )
+static inline eio_error_t eio_rd_acq(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz )
 {
-    return this->vtable.read_acquire(this, buffer, len, ts);
+    return this->vtable.read_acquire(this, buffer, len, ts, ts_hz);
 }
 
-static inline eio_error_t eio_rd_rel(eio_stream_t* this, int64_t* ts)
+static inline eio_error_t eio_rd_rel(eio_stream_t* this)
 {
-    return this->vtable.read_release(this, ts);
+    return this->vtable.read_release(this);
 }
 
 static inline eio_error_t eio_rd_sw_stats(eio_stream_t* this, void* stats)
@@ -79,15 +79,15 @@ static inline eio_error_t eio_rd_hw_stats(eio_stream_t* this, void* stats)
 
 
 //Write operations
-static inline eio_error_t eio_wr_acq(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
+static inline eio_error_t eio_wr_acq(eio_stream_t* this, char** buffer, int64_t* len)
 {
-    return this->vtable.write_acquire(this, buffer, len, ts);
+    return this->vtable.write_acquire(this, buffer, len);
 }
 
 
-static inline eio_error_t eio_wr_rel(eio_stream_t* this, int64_t len, int64_t* ts)
+static inline eio_error_t eio_wr_rel(eio_stream_t* this, int64_t len)
 {
-    return this->vtable.write_release(this,len, ts);
+    return this->vtable.write_release(this,len);
 }
 
 static inline eio_error_t eio_wr_sw_stats(eio_stream_t* this, void* stats)
@@ -98,12 +98,6 @@ static inline eio_error_t eio_wr_sw_stats(eio_stream_t* this, void* stats)
 static inline eio_error_t eio_wr_hw_stats(eio_stream_t* this, void* stats)
 {
     return this->vtable.write_hw_stats(this, stats);
-}
-
-
-static inline eio_error_t eio_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
-{
-    return this->vtable.time_to_tsps(this, time, tsps);
 }
 
 

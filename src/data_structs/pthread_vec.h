@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     7 July 2017

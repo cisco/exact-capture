@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     4 Aug 2017
@@ -8,75 +8,49 @@
  *  This is the main listener thread. Its job is to read a single ExaNIC buffer
  *  (2MB) and copy fragments of packets in 120B chunks into a slot in a larger
  *  circular queue. The larger queue is the connection to a writer thread that
- *  syncs data to disk. The listener thread puts templates for PCAP headers
- *  into the ring and minimal info into these headers. Final preparation of the
- *  headers is left to the writer thread. This thread has very tight timing
- *  requirements. It only has about 60ns to handle each fragment and maintain
- *  line rate. The writer requires that all data is 4K aligned. To solve this
- *  the listener inserts "dummy" packets to pad out to 4K whenever it syncs to
+ *  syncs data to disk. The listener thread formats data int "blaze" file format
+ *  directly in the buffer. It only has about 60ns to handle each fragment and
+ *  maintain line rate for minimum sized packets. The writer requires that all
+ *  data is 4K aligned. To solve this the listener inserts "dummy" packets to
+ *  pad out to 4K whenever it syncs to
  *  the writer.
  */
 #include <errno.h>
 
 #include "exact-capture-listener.h"
-#include "data_structs/expcap.h"
+
+#include "data_structs/blaze_file.h"
 #include "utils.h"
 
-extern volatile bool lstop;
-extern int64_t max_pkt_len;
-extern int64_t min_pcap_rec;
-extern int64_t max_pcap_rec;
 
 static __thread int64_t dev_id;
 static __thread int64_t port_id;
-static __thread lstats_t* lstats;
+static __thread listen_stats_t* stats;
 
-/*Assumes there there never more than 64 listener threads!*/
-extern lstats_t lstats_all[MAX_LTHREADS];
-
-
-
-static inline void add_dummy_packet(char* obuff,
-                                    char* dummy_data, int64_t dummy_rec_len,
-                                    int64_t prev_pkt_hw_time)
+static inline void add_dummy_packet(char* obuff, int64_t dummy_rec_len)
 {
 
 
-    const int64_t dummy_payload_len = dummy_rec_len - sizeof(pcap_pkthdr_t) -
-            sizeof(expcap_pktftr_t);
+    const int64_t dummy_payload_len = dummy_rec_len - sizeof(blaze_hdr_t);
 
-    ch_log_debug1("Adding dummy of pcap record of len=%li (payload=%li) to %p\n",
+    ch_log_debug1("Adding dummy of blaze record of len=%li (payload=%li) to %p\n",
                   dummy_rec_len, dummy_payload_len, obuff);
 
-    pcap_pkthdr_t* dummy_hdr = (pcap_pkthdr_t*) (obuff);
-    obuff += sizeof(pcap_pkthdr_t);
+    blaze_hdr_t* dummy_hdr = (blaze_hdr_t*) (obuff);
+    obuff += sizeof(blaze_hdr_t);
 
     //Use the last ts value so the writer thread doesn't break
-    dummy_hdr->ts.raw = prev_pkt_hw_time;
-    dummy_hdr->caplen = dummy_rec_len - sizeof(pcap_pkthdr_t);
-    dummy_hdr->len = 0; /*This is an invalid dummy packet, 0 wire length */
+    dummy_hdr->flags = BLAZE_FLAG_IGNR;
+    dummy_hdr->caplen  = dummy_rec_len - sizeof(blaze_hdr_t);
+    dummy_hdr->wirelen = 0; /*This is an invalid dummy packet, 0 wire length */
 
-    memset(obuff, 0xFF, dummy_payload_len);
-    //memcpy (obuff, dummy_data, dummy_payload_len);
     obuff += dummy_payload_len;
-
-    memset(obuff, 0xFF, sizeof(expcap_pktftr_t));
-    (void)dummy_data;
-    return;
-    expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)(obuff);
-
-    obuff += sizeof(expcap_pktftr_t);
-    pkt_ftr->flags = 0;
-    pkt_ftr->foot.extra.dropped = 0;
-
-    ch_log_debug1("Updated obuff to %p.\n", obuff);
 
 }
 
 
 static inline void flush_buffer(eio_stream_t* ostream, int64_t bytes_added,
-                  int64_t obuff_len, char* obuff, int64_t prev_pkt_hw_time,
-                  char* dummy_data)
+                  int64_t obuff_len, char* obuff)
 {
 
     //Nothing to do if nothing was added
@@ -89,17 +63,17 @@ static inline void flush_buffer(eio_stream_t* ostream, int64_t bytes_added,
                   bytes_added,
                   obuff,
                   obuff+obuff_len-1);
-    /* What is the minimum sized packet that we can squeeze in?
-     * Just a header and a footer, no content */
 
-    ch_log_debug1("max pcap record=%li min pcap record=%li\n", max_pcap_rec,
-                  min_pcap_rec);
+    /* What is the minimum sized record that we can squeeze in?
+     * Just a blaze header and no content */
+    const int64_t min_rec = sizeof(blaze_hdr_t);
+
 
     /* Find the next disk block boundary with space for adding a minimum packet*/
-    const int64_t block_bytes = round_up(bytes_added + min_pcap_rec, DISK_BLOCK);
+    const int64_t block_bytes = round_up(bytes_added + min_rec, DISK_BLOCK);
 
     ch_log_debug1("Block bytes=%li\n", block_bytes);
-    ifunlikely(block_bytes > obuff_len)
+    ifassert(block_bytes > obuff_len)
     {
         ch_log_fatal("Assumption violated %li > %li\n", block_bytes, obuff_len);
     }
@@ -109,80 +83,43 @@ static inline void flush_buffer(eio_stream_t* ostream, int64_t bytes_added,
 
     ch_log_debug1("Remain bytes=%li\n", remain);
 
-    /* Fill out the remaining space with packets no smaller than min_packet, and
-     * no larger than max_packet. Assume that remain is at least as big as a
-     * minimum sized packet (which is enforced above).
-     */
-    while(remain > 0)
-    {
-        ch_log_debug1("Remain:%li, added:%li max %li (problem=%i)\n",
-                      remain, bytes_added, obuff_len, bytes_added > obuff_len);
-
-        if(remain <= max_pcap_rec){
-            add_dummy_packet(obuff + bytes_added, dummy_data, remain,
-                             prev_pkt_hw_time);
-            ch_log_debug1("Added dummy of size %li\n", remain);
-            bytes_added += remain;
-            remain -= remain;
-            break;
-        }
-        else if(remain - max_pcap_rec < min_pcap_rec){
-            add_dummy_packet(obuff + bytes_added, dummy_data, min_pcap_rec,
-                             prev_pkt_hw_time);
-            ch_log_debug1("Added dummy of size %li\n", min_pcap_rec);
-            remain -= min_pcap_rec;
-            bytes_added += min_pcap_rec;
-        }
-        else{
-            add_dummy_packet(obuff + bytes_added, dummy_data, max_pcap_rec,
-                             prev_pkt_hw_time);
-            ch_log_debug1("Added dummy of size %li\n", max_pcap_rec);
-            remain -= max_pcap_rec;
-            bytes_added += max_pcap_rec;
-        }
-    }
+    add_dummy_packet(obuff + bytes_added, remain);
+    bytes_added += remain;
+    ch_log_debug1("Added dummy of size %li\n", remain);
 
     /* At this point, we've padded up to the disk block boundary.
      * Flush out to disk thread writer*/
-    eio_wr_rel(ostream, bytes_added, NULL);
+    eio_wr_rel(ostream, bytes_added);
 
     ch_log_debug1("Done flushing at %li bytes added\n", bytes_added);
 }
 
-/* Finish off a packet in the obuff by adding a footer. Return the number of bytes added */
-static inline int64_t fin_packet(pcap_pkthdr_t* hdr, char* obuff, uint8_t flags,
-        int64_t* dropped, int dev_id, int port_id)
+/* Finish off a packet by populating remaining fields in the header*/
+static inline void complete_packet(blaze_hdr_t* hdr, uint8_t flags,
+        int64_t* dropped, int dev_id, int port_id,  int64_t packet_seq)
 {
-
-    expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*) (obuff);
-
-    /* Are we sure? Doing this means that caplen > len, which is technically a
-     * PCAP violation? But the bytes here didn't come off the wire? */
-    hdr->caplen += sizeof(expcap_pktftr_t);
-    pkt_ftr->flags = flags;
-    pkt_ftr->foot.extra.dropped = *dropped;
-    pkt_ftr->dev_id  = dev_id;
-    pkt_ftr->port_id = port_id;
-    *dropped = 0;
-
-
-    return sizeof(expcap_pktftr_t);
+    hdr->flags   = flags;
+    hdr->dropped = *dropped;
+    hdr->dev     = dev_id;
+    hdr->port    = port_id;
+    hdr->seq     = packet_seq;
+    *dropped     = 0;
 }
 
 
 /* Copy a packet fragment from ibuff to obuff. Return the number of bytes copied*/
-static inline int64_t cpy_frag(pcap_pkthdr_t* hdr, char* const obuff,
-                               char* ibuff, int64_t ibuff_len)
+static inline int64_t cpy_frag(blaze_hdr_t* hdr, char* const obuff,
+                               char* ibuff, int64_t ibuff_len, int64_t snaplen)
 {
     int64_t added = 0;
     /* Only copy as much as the caplen */
-    iflikely(hdr->len < max_pkt_len)
+    iflikely(hdr->wirelen < snaplen)
     {
         /*
          * Get the data out of the fragment, but don't copy more
          * than max_caplen
          */
-        const int64_t copy_bytes = MIN(max_pkt_len - hdr->len, ibuff_len);
+        const int64_t copy_bytes = MIN(snaplen - hdr->wirelen, ibuff_len);
         memcpy (obuff, ibuff, copy_bytes);
 
         /* Do accounting and stats */
@@ -190,20 +127,18 @@ static inline int64_t cpy_frag(pcap_pkthdr_t* hdr, char* const obuff,
         added = copy_bytes;
     }
 
-    hdr->len += ibuff_len;
-    lstats->bytes_rx += ibuff_len;
+    hdr->wirelen     += ibuff_len;
+    stats->bytes_rx += ibuff_len;
 
     return added;
 }
 
 
-static i64 rx_packets = 0;
-
 /* This func tries to rx one packet and returns the number of bytes RX'd.
  * The return may be zero if no packet was RX'd, or if there was an error */
 static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
-        char* obuff_end, exanic_cycles_t* rx_time, int64_t* dropped
-)
+        char* obuff_end, int64_t* dropped, int64_t* packet_seq,
+        volatile bool* stop, int64_t snaplen )
 {
 #ifndef NOIFASSERT
     i64 rx_frags = 0;
@@ -212,43 +147,44 @@ static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
     /* Set up a new pcap header */
     int64_t rx_b = 0;
 
-    pcap_pkthdr_t* hdr = (pcap_pkthdr_t*) (obuff);
-    rx_b += sizeof(pcap_pkthdr_t);
+    blaze_hdr_t* hdr = (blaze_hdr_t*) (obuff);
+    rx_b += sizeof(blaze_file_hdr_t);
     ifassert(obuff + rx_b >= obuff_end)
         ch_log_fatal("Obuff %p + %li = %p will exceeded max %p\n", obuff, rx_b,
                      obuff + rx_b, obuff_end);
 
-
     /* Reset just the things that need to be incremented in the header */
     hdr->caplen  = 0;
-    hdr->len     = 0;
+    hdr->wirelen = 0;
 
     /* Try to RX the first fragment */
     eio_error_t err = EIO_ENONE;
     char* ibuff;
     int64_t ibuff_len;
-    for (int64_t tryagains = 0; ; lstats->spins1_rx++, tryagains++)
+    int64_t rx_time = 0;
+    int64_t rx_time_hz = 0;
+    for (int64_t tryagains = 0; ; stats->spins1_rx++, tryagains++)
     {
-        err = eio_rd_acq (istream, &ibuff, &ibuff_len, rx_time);
+        err = eio_rd_acq (istream, &ibuff, &ibuff_len, &rx_time, &rx_time_hz);
 
         iflikely(err != EIO_ETRYAGAIN)
         {
-            hdr->ts.raw = *rx_time;
+            hdr->ts = rx_time;
+            hdr->hz = rx_time_hz;
             break;
         }
 
         /* Make sure we don't wait forever */
-        ifunlikely(lstop || tryagains >= (1024 * 1024))
+        ifunlikely(*stop || tryagains >= (1024 * 1024))
         {
             return 0;
         }
 
     }
 
-    rx_packets++;
     /* Note, no use of lstop: don't stop in the middle of RX'ing a packet */
-    for (;; err = eio_rd_acq (istream, &ibuff, &ibuff_len, NULL),
-            lstats->spinsP_rx++)
+    for (;; err = eio_rd_acq (istream, &ibuff, &ibuff_len, NULL, NULL),
+            stats->spinsP_rx++)
     {
 #ifndef NOIFASSERT
         rx_frags++;
@@ -261,53 +197,53 @@ static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
 
             /* Got a fragment. There are some more fragments to come */
             case EIO_EFRAG_MOR:
-                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len);
+                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len, snaplen);
                 break;
 
             /* Got a complete frame. There are no more fragments */
             case EIO_ENONE:
-                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len);
-                rx_b += fin_packet(hdr, obuff + rx_b, EXPCAP_FLAG_NONE, dropped,
-                                   dev_id, port_id);
+                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len, snaplen);
+                complete_packet(hdr, BLAZE_FLAG_NONE, dropped, dev_id, port_id,
+                                *packet_seq);
                 break;
 
             /* Got a corrupt (CRC) frame. There are no more fragments */
             case EIO_EFRAG_CPT:
-                lstats->errors++;
-                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len);
-                rx_b += fin_packet(hdr, obuff + rx_b, EXPCAP_FLAG_CRPT,dropped,
-                                   dev_id, port_id);
+                stats->errors++;
+                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len, snaplen);
+                complete_packet(hdr, BLAZE_FLAG_CRPT,dropped, dev_id, port_id,
+                                *packet_seq);
                 break;
 
             /* Got an aborted frame. There are no more fragments */
             case EIO_EFRAG_ABT:
-                lstats->errors++;
-                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len);
-                rx_b += fin_packet(hdr, obuff + rx_b, EXPCAP_FLAG_ABRT,dropped,
-                                   dev_id, port_id);
+                stats->errors++;
+                rx_b += cpy_frag(hdr,obuff + rx_b,ibuff,ibuff_len, snaplen);
+                complete_packet(hdr, BLAZE_FLAG_ABRT,dropped, dev_id,  port_id,
+                                *packet_seq);
                 break;
 
             /* **** UNRECOVERABLE ERRORS BELOW THIS LINE **** */
             /* Software overflow happened, we're dead. Exit the function */
             case EIO_ESWOVFL:
-                lstats->swofl++;
+                stats->swofl++;
                 /* Forget what we were doing, just exit */
-                eio_rd_rel(istream, NULL);
+                eio_rd_rel(istream);
 
                 /*Skip to a good place in the receive buffer*/
-                err = eio_rd_acq(istream, NULL, NULL, NULL);
-                eio_rd_rel(istream, NULL);
+                err = eio_rd_acq(istream, NULL, NULL, NULL, NULL);
+                eio_rd_rel(istream);
                 return 0;
 
             /* Hardware overflow happened, we're dead. Exit the function */
             case EIO_EHWOVFL:
-                lstats->hwofl++;
+                stats->hwofl++;
                 /* Forget what we were doing, just exit */
-                eio_rd_rel(istream, NULL);
+                eio_rd_rel(istream);
 
                 /*Skip to a good place in the receive buffer*/
-                err = eio_rd_acq(istream, NULL, NULL, NULL);
-                eio_rd_rel(istream, NULL);
+                err = eio_rd_acq(istream, NULL, NULL, NULL, NULL);
+                eio_rd_rel(istream);
                 return 0;
 
             default:
@@ -316,7 +252,7 @@ static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
 
         /* When we get here, we have fragment(s), so we need to release the read
          * pointer, but this may fail. In which case we drop everything */
-        if(eio_rd_rel(istream, NULL)){
+        if(eio_rd_rel(istream)){
             return 0;
         }
 
@@ -329,14 +265,13 @@ static inline int64_t rx_packet ( eio_stream_t* istream,  char* const obuff,
 
         /* If there are no more frags to come, then we're done! */
         if(err != EIO_EFRAG_MOR){
-            lstats->packets_rx++;
+            stats->packets_rx++;
+            (*packet_seq) += 1;
             return rx_b;
         }
 
         /* There are more frags, go again!*/
     }
-
-
 
     /* Unreachable */
     ch_log_fatal("Error: Reached unreachable code!\n");
@@ -356,7 +291,7 @@ static inline int get_ring(int64_t curr_ring, int64_t ring_count,
     {
         curr_ring = curr_ring >= ring_count ? 0 : curr_ring;
         eio_stream_t* ring = rings[curr_ring];
-        eio_error_t err = eio_wr_acq (ring, ring_buff, obuff_len, NULL);
+        eio_error_t err = eio_wr_acq (ring, ring_buff, obuff_len);
         iflikely(err == EIO_ENONE)
         {
             ch_log_debug1("Got ring at index %li..\n", curr_ring);
@@ -392,12 +327,12 @@ static inline int get_ring(int64_t curr_ring, int64_t ring_count,
 
 void* listener_thread (void* params)
 {
-    listener_params_t* lparams = params;
+    lparams_t* lparams = params;
     ch_log_debug1("Creating exanic listener thread id=%li on interface=%s\n",
                     lparams->ltid, lparams->nic_istream->name);
 
     //Raise this thread prioirty
-    if(nice(-20) < 0)
+    if(nice(-20) == -1)
     {
         ch_log_warn("Failed to change thread priority."
                        "Performance my be affected! (%s)\n", strerror(errno));
@@ -413,7 +348,7 @@ void* listener_thread (void* params)
 
     /* Thread local storage parameters */
     eio_get_id(lparams->nic_istream, &dev_id, &port_id);
-    lstats  = &lstats_all[ltid];
+    stats  = &lparams->stats;
 
     eio_stream_t** rings = lparams->rings;
     int64_t rings_count = lparams->rings_count;
@@ -435,17 +370,15 @@ void* listener_thread (void* params)
     const int64_t maxwaitns = 1000 * 1000 * 100;
     eio_nowns (&now);
     int64_t timeout = now + maxwaitns; //100ms timeout
-    exanic_cycles_t prev_pkt_hw_time = 0;
 
     int64_t dropped = 0;
+    int64_t packet_seq = 0;
 
-    const int64_t expcap_foot_size = (int64_t)sizeof(expcap_pktftr_t);
-    const int64_t pcap_head_size = (int64_t)sizeof(pcap_pkthdr_t);
-    const int64_t max_pcap_rec = max_pkt_len + pcap_head_size
-                                        + expcap_foot_size;
+    const int64_t blaze_hdr_size = (int64_t)sizeof(blaze_hdr_t);
+    const int64_t max_blaze_rec = lparams->snaplen + blaze_hdr_size;
 
 
-    while (!lstop)
+    while (!*lparams->stop)
     {
         /*
          * The following code will flush the output buffer and send it across to
@@ -462,16 +395,14 @@ void* listener_thread (void* params)
          * long before timestamp conversions and things happen.
          */
 
-        const bool buff_full = obuff_len - bytes_added <  max_pcap_rec * 2;
-        const bool timed_out = now >= timeout && bytes_added > pcap_head_size;
+        const bool buff_full = obuff_len - bytes_added <  max_blaze_rec * 2;
+        const bool timed_out = now >= timeout && bytes_added > blaze_hdr_size;
         ifunlikely( obuff && (buff_full || timed_out))
         {
             ch_log_debug1( "Buffer flush: buff_full=%i, timed_out =%i, obuff_len (%li) - bytes_added (%li) = %li < full_packet_size x 2 (%li) = (%li)\n",
-                    buff_full, timed_out, obuff_len, bytes_added, obuff_len - bytes_added, max_pcap_rec * 2);
+                    buff_full, timed_out, obuff_len, bytes_added, obuff_len - bytes_added, max_blaze_rec * 2);
 
-            flush_buffer(rings[curr_ring], bytes_added,
-                    obuff_len, obuff, prev_pkt_hw_time,
-                    dummy_data);
+            flush_buffer(rings[curr_ring], bytes_added, obuff_len, obuff);
 
             /* Reset the timer and the buffer */
             eio_nowns(&now);
@@ -481,7 +412,7 @@ void* listener_thread (void* params)
             bytes_added = 0;
         }
 
-        while(!obuff && !lstop)
+        while(!obuff && !*lparams->stop)
         {
             /* We don't have an output buffer to work with, so try to grab one*/
             curr_ring = get_ring(curr_ring,rings_count,rings, &obuff,&obuff_len);
@@ -500,32 +431,35 @@ void* listener_thread (void* params)
             {
                 ch_log_debug2("No buffer, dropping packet..\n");
                 eio_error_t err = EIO_ENONE;
-                err = eio_rd_acq(nic, NULL, NULL, NULL);
+                err = eio_rd_acq(nic, NULL, NULL, NULL, NULL);
                 iflikely(err == EIO_ENONE)
                 {
-                    lstats->dropped++;
+                    stats->dropped++;
                     dropped++;
+                    packet_seq++;
+
                 }
                 ifunlikely(err == EIO_ESWOVFL)
                 {
-                    lstats->swofl++;
+                    stats->swofl++;
                 }
-                err = eio_rd_rel(nic, NULL);
+                err = eio_rd_rel(nic);
                 if(err == EIO_ESWOVFL )
                 {
-                    lstats->swofl++;
+                    stats->swofl++;
                 }
             }
         }
 
-        if(lstop){
+        if(*lparams->stop){
             goto finished;
         }
 
         /* This func tries to rx one packet it returns the number of bytes RX'd
          * this may be zero if no packet was RX'd, or if there was an error */
         const int64_t rx_bytes = rx_packet(nic, obuff + bytes_added, obuff +
-                                           obuff_len, &prev_pkt_hw_time, &dropped);
+                                           obuff_len, &dropped, &packet_seq,
+                                           lparams->stop, lparams->snaplen);
 
         ifunlikely(rx_bytes == 0)
         {
@@ -533,10 +467,10 @@ void* listener_thread (void* params)
              * waiting around with nothing to do */
             eio_nowns(&now);
         }
-        ifassert(rx_bytes > max_pcap_rec)
+        ifassert(rx_bytes > max_blaze_rec)
         {
             ch_log_fatal("RX %liB > full packet size %li\n",
-                         rx_bytes, max_pcap_rec);
+                         rx_bytes, max_blaze_rec);
 
         }
 
@@ -559,14 +493,13 @@ finished:
 
 
     //Remove any last headers that are waiting
-    if(bytes_added == sizeof(pcap_pkthdr_t))
+    if(bytes_added == sizeof(blaze_hdr_t))
     {
         bytes_added = 0;
     }
 
     if(obuff){
-        flush_buffer(rings[curr_ring], bytes_added, obuff_len,
-                obuff, prev_pkt_hw_time, dummy_data);
+        flush_buffer(rings[curr_ring], bytes_added, obuff_len, obuff);
     }
 
     ch_log_debug1("Listener thread %i for %s done.\n", lparams->ltid,

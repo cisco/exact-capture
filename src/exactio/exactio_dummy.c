@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -118,7 +118,7 @@ static void dummy_destroy(eio_stream_t* this)
 
 //Read operations
 #define EXANIC_DATA_CHUNK_SIZE 120 /* This is unlikely to ever change. Ever. */
-static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts )
+static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz )
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ifassert(priv->closed){
@@ -164,12 +164,13 @@ static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t
     priv->reading = true;
 
     (void)ts;
-    //eio_nowns(ts);
+    (void)ts_hz;
+
     //ch_log_info("Returning buffer of size=%li at %p\n", *len, *buffer);
     return result;
 }
 
-static eio_error_t dummy_read_release(eio_stream_t* this, int64_t* ts)
+static eio_error_t dummy_read_release(eio_stream_t* this)
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -179,7 +180,7 @@ static eio_error_t dummy_read_release(eio_stream_t* this, int64_t* ts)
     }
 
     priv->reading = false;
-    eio_nowns(ts);
+
     //Nothing to do here;
     return EIO_ENONE;
 }
@@ -204,7 +205,7 @@ static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void* stats)
 
 
 //Write operations
-static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
+static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_t* len)
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ch_log_debug3("Calling dummy write acquire\n");
@@ -214,10 +215,6 @@ static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_
         return EIO_ERELEASE;
     }
 
-    ifassert(*len > priv->write_buff_size){
-        ch_log_fatal("Error: Requested write size too big\n");
-        return EIO_ETOOBIG;
-    }
 
     iflikely(*buffer && *len){
          //User has supplied a buffer and a length, so just give it back to them
@@ -226,17 +223,21 @@ static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_
 
      }
      else{
+         ifassert(*len > priv->write_buff_size){
+             ch_log_fatal("Error: Requested write size too big\n");
+             return EIO_ETOOBIG;
+         }
+
          *len = priv->write_buff_size;
          *buffer = priv->write_buff;
      }
 
      priv->writing = true;
-     eio_nowns(ts);
 
     return EIO_ENONE;
 }
 
-static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len, int64_t* ts)
+static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len)
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     ch_log_debug3("Calling dummy write release\n");
@@ -252,14 +253,8 @@ static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len, int64_t*
         return EIO_ETOOBIG;
     }
 
-
-    //If the user has supplied their own buffer, use it
-    //const char* buff = priv->usr_write_buff ? priv->usr_write_buff : priv->write_buff;
-    //priv->usr_write_buff = NULL;
-
     priv->writing = false;
 
-    eio_nowns(ts);
     return EIO_ENONE;
 }
 
@@ -279,15 +274,6 @@ static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void* stats)
     return EIO_ENOTIMPL;
 }
 
-
-static eio_error_t dummy_time_to_tsps(eio_stream_t* this, void* time, timespecps_t* tsps)
-{
-    (void)this;
-    (void)time;
-    (void)tsps;
-
-    return EIO_ENOTIMPL;
-}
 
 static eio_error_t dummy_get_id(eio_stream_t* this, int64_t* id_major, int64_t* id_minor)
 {

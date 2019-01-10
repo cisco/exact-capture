@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     17 Jul 2017
@@ -69,8 +69,8 @@ typedef struct exactio_stream_interface_s{
 
     //Read operations
     //----------------
-    eio_error_t (*read_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts );
-    eio_error_t (*read_release)(eio_stream_t* this,int64_t* ts);
+    eio_error_t (*read_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz);
+    eio_error_t (*read_release)(eio_stream_t* this);
     eio_error_t (*read_sw_stats)(eio_stream_t* this,void* stats);
     eio_error_t (*read_hw_stats)(eio_stream_t* this,void* stats);
 
@@ -79,15 +79,14 @@ typedef struct exactio_stream_interface_s{
     //----------------
     //for write_acquire len can be supplied as a hint. If len is 0, the MTU will be used
     //for write_release len is zero, the frame the data is not committed
-    eio_error_t (*write_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts );
-    eio_error_t (*write_release)(eio_stream_t* this, int64_t len, int64_t* ts );
+    eio_error_t (*write_acquire)(eio_stream_t* this, char** buffer, int64_t* len);
+    eio_error_t (*write_release)(eio_stream_t* this, int64_t len);
     eio_error_t (*write_sw_stats)(eio_stream_t* this,void* stats);
     eio_error_t (*write_hw_stats)(eio_stream_t* this,void* stats);
 
     //Auxilary Operations
     //----------------
     //Convert internal timestamp representation to a picosecond times specification
-    eio_error_t (*time_to_tsps)(eio_stream_t* this, void* time, timespecps_t* ts );
     eio_error_t (*get_id)(eio_stream_t* this, int64_t* id_major, int64_t* id_minor );
 
 } exactio_stream_interface_t;
@@ -133,7 +132,6 @@ struct exactio_stream_s {
             .write_release  = NAME##_write_release,\
 			.write_sw_stats = NAME##_write_sw_stats,\
 			.write_hw_stats = NAME##_write_hw_stats,\
-			.time_to_tsps   = NAME##_time_to_tsps,\
 			.get_id   	    = NAME##_get_id,\
             .destroy        = NAME##_destroy,\
     };\

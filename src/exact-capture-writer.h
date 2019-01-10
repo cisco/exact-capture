@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     4 Aug 2017
@@ -38,28 +38,15 @@
 #include "utils.h"
 
 
-/*
- * Wrap up istreams for the writer thread. The writer cares which listener NIC
- * packets came from so that it can do timestamp conversion
- */
-typedef struct
-{
-    eio_stream_t* ring_istream;
-    eio_stream_t* nic_istream;
-} ring_istream_t;
-
-
-
-
 
 typedef struct
 {
     int64_t wtid; /* Writer thread id */
     eio_stream_t* disk_ostream;
-    ring_istream_t* rings;
+    eio_stream_t** rings;
     int64_t rings_count;
     volatile bool* stop;
-} writer_params_t;
+} wparams_t;
 
 
 

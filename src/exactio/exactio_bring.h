@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -42,7 +42,17 @@ typedef struct bring_hw_stats
    int64_t cmajflt; //major faults - child processes
    int64_t utime; //user mode time in clock ticks
    int64_t stime; //kernel mode time in clock ticks
-} bstats_t;
+} bring_stats_hw_t;
+
+
+typedef struct rdwr_bring_sw_stats
+{
+    int64_t aq_miss;  //Nothing in the ring
+    int64_t aq_hit;   //Something was in the ring
+    int64_t aq_bytes; //Bytes acquired
+    int64_t rl_bytes; //Bytes released
+} bring_stats_sw_t;
+
 
 
 

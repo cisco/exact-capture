@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     19 Jun 2017
@@ -24,6 +24,16 @@ typedef struct  {
     uint64_t write_max_file_size;
 
 } file_args_t;
+
+
+typedef struct file_stats_sw_rdwr_t
+{
+    int64_t count;
+    int64_t bytes;
+    char name[20];
+} file_stats_sw_rdwr_t;
+
+
 
 NEW_IOSTREAM_DECLARE(file, file_args_t);
 
