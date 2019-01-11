@@ -651,24 +651,24 @@ int main (int argc, char** argv)
     signal (SIGALRM, signal_handler);
     signal (SIGTERM, signal_handler);
 
-    ch_opt_addSU (CH_OPTION_REQUIRED, 'i', "interface",         "Interface(s) to listen on",                        &options.ifaces);
-    ch_opt_addSU (CH_OPTION_REQUIRED, 'o', "output",            "Destination(s) to write to",                       &options.dests);
-    ch_opt_addsu (CH_OPTION_REQUIRED, 'c', "cpus",              "CPUs in the form m:l,l,l:w,w,w",                   &options.cpus_str);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 's', "snaplen",           "Maximum capture length",                           &options.snaplen, 2048);
-    ch_opt_addbi (CH_OPTION_FLAG,     'n', "no-promisc",        "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'k', "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",           "Maximum file size (<=0 means no max)",             &options.max_file, -1);
-    ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",           "Log file to log output to",                        &options.log_file, NULL);
-    ch_opt_addfi (CH_OPTION_OPTIONAL, 't', "log-report-int",    "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
-    ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",           "Verbose output",                                   &options.verbose, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 'V', "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
-    ch_opt_addbi (CH_OPTION_FLAG,     'T', "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'd', "debug-logging",     "Turn on debug logging output",                     &options.debug_log, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'w', "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'S', "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 'p', "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
-    ch_opt_addbi (CH_OPTION_FLAG,     'C', "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'N', "no-color",          "Disable colored logging",                          &options.no_color, false);
+    ch_opt_addSU (CH_OPTION_REQUIRED, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
+    ch_opt_addSU (CH_OPTION_REQUIRED, 'o', "output",           "Destination(s) to write to",                       &options.dests);
+    ch_opt_addsu (CH_OPTION_REQUIRED, 'c', "cpus",             "CPUs in the form m:l,l,l:w,w,w",                   &options.cpus_str);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 's', "snaplen",          "Maximum capture length",                           &options.snaplen, 2048);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-promisc",        "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",          "Maximum file size (<=0 means no max)",             &options.max_file, -1);
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file, NULL);
+    ch_opt_addfi (CH_OPTION_OPTIONAL, 't', "log-report-int",   "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
+    ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",          "Verbose output",                                   &options.verbose, false);
+    ch_opt_addii (CH_OPTION_OPTIONAL,  0, "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
+    ch_opt_addbi (CH_OPTION_FLAG,     'd', "debug-logging",    "Turn on debug logging output",                     &options.debug_log, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
+    ch_opt_addii (CH_OPTION_OPTIONAL,  0, "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-color",          "Disable colored logging",                          &options.no_color, false);
 
     ch_opt_parse (argc, argv);
 
@@ -904,8 +904,8 @@ int main (int argc, char** argv)
     ch_log_debug1("All writer threads dead.\n");
 
 
+    //estats_output(stats, &stats_sample_stop, &stats_sample_start);
 
-    estats_output(stats, &stats_sample_stop, &stats_sample_prev);
 //    estats_output_summary(stats, &stats_sample_stop, &stats_sample_start);
 //    estats_destroy(stats);
 

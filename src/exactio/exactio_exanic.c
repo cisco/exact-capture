@@ -193,11 +193,10 @@ static inline eio_error_t exa_read_hw_stats(eio_stream_t* this, void* stats)
     nic_hw_stats->rx_error_count   = port_stats.rx_error_count;
     nic_hw_stats->rx_ignored_count = port_stats.rx_ignored_count;
 
-    strncpy(nic_hw_stats->name,priv->rx_dev,16);
+    nic_hw_stats->name = this->name;
 
     return err;
 }
-
 
 
 //Write operations

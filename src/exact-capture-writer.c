@@ -40,7 +40,6 @@ static inline eio_error_t write_pcap_header (eio_stream_t* ostream)
     hdr->linktype = DLT_EN10MB;
 
     ch_log_debug1("Blaze file hdr size=%li\n", sizeof(blaze_file_hdr_t));
-    ch_log_warn("********* 1\n");
     blaze_hdr_t* pkt_hdr = (blaze_hdr_t*) (hdr + 1);
     int64_t dummy_packet_len = DISK_BLOCK - sizeof(blaze_file_hdr_t)
             - sizeof(blaze_hdr_t);
@@ -48,18 +47,15 @@ static inline eio_error_t write_pcap_header (eio_stream_t* ostream)
                  dummy_packet_len, DISK_BLOCK,
                  sizeof(blaze_file_hdr_t), sizeof(blaze_hdr_t));
 
-    ch_log_info("********* 2\n");
     pkt_hdr->flags   = BLAZE_FLAG_IGNR;
     pkt_hdr->caplen  = dummy_packet_len;
     pkt_hdr->wirelen = 0;
     char* pkt_data = (char*) (pkt_hdr + 1);
     memcpy (pkt_data, dummy_data, dummy_packet_len);
 
-    ch_log_warn("********* 3\n");
     char* wr_buff = blaze_head_block;
     int64_t len = DISK_BLOCK;
 
-    ch_log_warn("********* 4\n");
     eio_error_t err = eio_wr_acq (ostream, &wr_buff, &len);
     if (err)
     {
@@ -75,8 +71,7 @@ static inline eio_error_t write_pcap_header (eio_stream_t* ostream)
         ch_log_error("Could not write to disk with unexpected error %i\n", err);
     }
 
-    finished:
-    ch_log_warn("err=%i\n",err);
+finished:
     free (blaze_head_block);
     return err;
 }
@@ -128,7 +123,6 @@ void* writer_thread (void* params)
     char* rd_buff = NULL;
     int64_t rd_buff_len = 0;
 
-    ch_log_warn("stop=%i\n",*wparams->stop);
     while (!*wparams->stop)
     {
 

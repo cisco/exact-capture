@@ -675,7 +675,8 @@
 //}
 
 
-static void format_bring_stats(exact_stats_t* stats,
+static void format_bring_stats(int more_verbose_lvl,
+                               exact_stats_t* stats,
                                bring_stats_hw_t* bring_hw,
                                bring_stats_sw_t* bring_sw,
                                int64_t delta_ns,
@@ -690,44 +691,62 @@ static void format_bring_stats(exact_stats_t* stats,
     bring_stats_hw_t bring_hw_totals = {0};
     bring_stats_sw_t bring_sw_totals = {0};
 
-    hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off, "[");
+    if(more_verbose_lvl > 1)
+    {
+        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off, "[");
+        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off, "[");
+    }
     for(int w = 0; w < stats->wcount; w++)
     {
         const double bring_sw_aq_rate_gbps = ((double)bring_sw[w].aq_bytes * 8) / delta_ns;
         const double bring_sw_rl_rate_gbps = ((double)bring_sw[w].rl_bytes * 8) / delta_ns;
 
-        hw_str_off += snprintf(bring_hw_str + hw_str_off,out_str_len - hw_str_off,
-                               "%li.%li ",
-                               bring_hw[w].majflt,
-                               bring_hw[w].minflt );
-        sw_str_off += snprintf(bring_sw_str + sw_str_off,out_str_len - sw_str_off,
-                               "%li hits /%li miss Aq:%.2fGbps Rl:%.2fGbps,",
-                               bring_sw[w].aq_hit,
-                               bring_sw[w].aq_miss,
-                               bring_sw_aq_rate_gbps,
-                               bring_sw_rl_rate_gbps );
+        if(more_verbose_lvl > 1)
+        {
+            hw_str_off += snprintf(bring_hw_str + hw_str_off,out_str_len - hw_str_off,
+                                   "%li/%liflts ",
+                                   bring_hw[w].majflt,
+                                   bring_hw[w].minflt );
+            sw_str_off += snprintf(bring_sw_str + sw_str_off,out_str_len - sw_str_off,
+                                   "%li/%.2fM Aq:%.2fGbps Rl:%.2fGbps,",
+                                   bring_sw[w].aq_hit,
+                                   bring_sw[w].aq_miss / 1000.0 / 1000.0,
+                                   bring_sw_aq_rate_gbps,
+                                   bring_sw_rl_rate_gbps );
+        }
 
         bring_hw_totals = bring_stats_hw_add(&bring_hw_totals,&bring_hw[w]);
         bring_sw_totals = bring_stats_sw_add(&bring_sw_totals,&bring_sw[w]);
 
     }
 
-    hw_str_off--; //Remove trailing space.
-    hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,
-                           "] (%li.%liflts)",
-                           bring_hw_totals.majflt,
-                           bring_hw_totals.minflt);
+    if(more_verbose_lvl > 1)
+    {
+        hw_str_off--; //Remove trailing space.
+        sw_str_off--; //Remove trailing comma
+        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,"]");
+        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,"]");
 
-    const double bring_sw_aq_total_rate_gbps = ((double)bring_sw_totals.aq_bytes * 8) / delta_ns;
-    const double bring_sw_rl_total_rate_gbps = ((double)bring_sw_totals.rl_bytes * 8) / delta_ns;
 
-    sw_str_off--; //Remove trailing comma
-    sw_str_off += snprintf(bring_sw_str + hw_str_off, out_str_len - hw_str_off,
-                           "] (%li hits / %li miss Aq:%.2fGbps Rl:%.2fGbps)",
-                           bring_sw_totals.aq_hit,
-                           bring_sw_totals.aq_miss,
-                           bring_sw_aq_total_rate_gbps,
-                           bring_sw_rl_total_rate_gbps );
+    }
+
+    if(more_verbose_lvl < 2)
+    {
+        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,
+                               "(%li/%liflts)",
+                               bring_hw_totals.majflt,
+                               bring_hw_totals.minflt);
+
+        const double bring_sw_aq_total_rate_gbps = ((double)bring_sw_totals.aq_bytes * 8) / delta_ns;
+        const double bring_sw_rl_total_rate_gbps = ((double)bring_sw_totals.rl_bytes * 8) / delta_ns;
+
+        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,
+                               "(%lihits / %.2fMmiss Aq:%.2fGbps Rl:%.2fGbps)",
+                               bring_sw_totals.aq_hit,
+                               bring_sw_totals.aq_miss / 1000.0 / 1000.0,
+                               bring_sw_aq_total_rate_gbps,
+                               bring_sw_rl_total_rate_gbps );
+    }
 
 }
 
@@ -740,65 +759,41 @@ static void estats_wprint(exact_stats_t* stats,
                           int64_t delta_ns,
                           int64_t tid)
 {
-
     const char* name = file_sw->name;
 
-        const double w_rate_mops  = ((double) file_sw->count ) / (delta_ns / 1000.0);
-        const double w_rate_gbs  = ((double) file_sw->bytes  * 8) / delta_ns;
+    const int64_t w_rate_ops = (file_sw->count / delta_ns) * 1000 * 1000 * 1000;
+    const double w_rate_gbs  = ((double) file_sw->bytes  * 8.0) / delta_ns;
 
-        if(stats->more_verbose_lvl == 1 )
-        {
-            ch_log_info("Writer:%02i %-17s -- %.2fGbps %.2fMops\n",
-                        tid,
-                        name,
-                        w_rate_gbs,
-                        w_rate_mops);
-        }
-
-        else if(stats->more_verbose_lvl == 2)
-        {
-
-            const int MAX_CHARS = 1024;
-            char bring_hw_str[MAX_CHARS];
-            char bring_sw_str[MAX_CHARS];
-            format_bring_stats(stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
+    const int MAX_CHARS = 1024;
+    char bring_hw_str[MAX_CHARS];
+    char bring_sw_str[MAX_CHARS];
+    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
 
 
-            ch_log_info("Writer:%02i %-17s -- %.2fGbps %.2fMops RINGHW %s RINGSW %s\n",
-                   tid,
-                   name,
-                   w_rate_gbs,
-                   w_rate_mops,
+    if(stats->more_verbose_lvl == 1 )
+    {
+        ch_log_info("Writer:%02i %-17s -- %.2fGbps %s %s\n",
+                    tid,
+                    name,
+                    w_rate_gbs,
+                    bring_hw_str,
+                    bring_sw_str);
+    }
 
-                   bring_hw_str,
-                   bring_sw_str
-            );
+    else if(stats->more_verbose_lvl == 2)
+    {
 
+        ch_log_info("Writer:%02i %-17s -- %.2fGbps %li Ops RINGHW %s RINGSW %s\n",
+                    tid,
+                    name,
+                    w_rate_gbs,
+                    w_rate_ops,
 
-//            const int MAX_CHARS = 1024;
-//            char page_faults_str[MAX_CHARS];
-//            int offset = 0;
-//            offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "[");
-//            for(int wid = 0; wid < bstats_count; wid++)
-//            {
-//                offset += snprintf(page_faults_str + offset,MAX_CHARS - offset, "%li.%li ", bstats_deltas[wid].majflt, bstats_deltas[wid].minflt );
-//            }
-//            offset--; //Remove trailing space.
-//            offset += snprintf(page_faults_str + offset, MAX_CHARS - offset, "] ");
-//
-//
-//            ch_log_info("Writer:%02i %-17s -- %.2fGbps %.2fMpps (%.2fGbps wire %.2fGbps disk) %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins Faults:%s\n",
-//                        tid,
-//                        pretty,
-//                        w_pcrate_gbs, w_rate_mpps, w_plrate_gbs, w_drate_gbs,
-//                        wstats_delta.pcbytes / 1024.0 / 1024.0,
-//                        wstats_delta.plbytes / 1024.0 / 1024.0,
-//                        wstats_delta.dbytes / 1024.0 / 1024.0,
-//                        wstats_delta.packets,
-//                        wstats_delta.spins / 1000.0 / 1000.0,
-//                        page_faults_str);
+                    bring_hw_str,
+                    bring_sw_str
+        );
 
-        }
+    }
 
 }
 
@@ -829,47 +824,43 @@ static void estats_lprint(exact_stats_t* stats,
     /* Can't have lost -ve lost packets*/
     maybe_lost = maybe_lost < 0 ? 0 : maybe_lost;
 
+    const int MAX_CHARS = 1024;
+    char bring_hw_str[MAX_CHARS];
+    char bring_sw_str[MAX_CHARS];
+    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
+
     if(stats->more_verbose_lvl == 1 )
     {
-        ch_log_info("Listener:%02i %s -- %.2fGbps %.2fMpps %.2fMB %li Pkts %lierrs %lidrp %liswofl\n",
+        ch_log_info("Listener:%02i %18s -- %.2fGbps %.2fMpps %lierrs %lidrp %liswofl %s %s\n",
                tid,
                nic_hw->name,
 
                nic_sw_rate_gbs,
                nic_sw_rate_mpps,
 
-               listen_sw->bytes_rx / 1024.0 / 1024.0,
-               listen_sw->packets_rx ,
+               listen_sw->errors, listen_sw->dropped, listen_sw->swofl,
 
-               listen_sw->errors, listen_sw->dropped, listen_sw->swofl);
+               bring_hw_str,
+               bring_sw_str);
     }
     else if(stats->more_verbose_lvl == 2)
     {
-        const int MAX_CHARS = 1024;
-        char bring_hw_str[MAX_CHARS];
-        char bring_sw_str[MAX_CHARS];
-        format_bring_stats(stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
-
-
-        ch_log_info("Listener:%02i %-17s -- NICHW [%.2fiMpps %i Pkts] NICSW [%.2fMpps %li Pkts .2fGbps %.2fMB %.3fM Spins1 %.3fM SpinsP %lierrs %lidrp %liswofl %lihwofl] lost?:%li RINGHW %s RINGSW %s\n",
+        ch_log_info("Listener:%02i %18s -- HW:%.2f SW:%.2fMpps [lost?:%li] %.2fGbps %lierrs %lidrp %liswofl %lihwofl %.3fM Spins1 %.3fM SpinsP RINGHW %s RINGSW %s\n",
                tid,
                nic_hw->name,
 
                nic_hw_rate_mpps,
-               nic_hw->rx_count,
-
                nic_sw_rate_mpps,
-               listen_sw->packets_rx ,
+               maybe_lost,
+
                nic_sw_rate_gbs,
-               listen_sw->bytes_rx / 1024.0 / 1024.0,
-               listen_sw->spins1_rx / 1000.0 / 1000.0,
-               listen_sw->spinsP_rx / 1000.0 / 1000.0,
                listen_sw->errors,
                listen_sw->dropped,
                listen_sw->swofl,
                listen_sw->hwofl,
 
-               maybe_lost,
+               listen_sw->spins1_rx / 1000.0 / 1000.0,
+               listen_sw->spinsP_rx / 1000.0 / 1000.0,
 
                bring_hw_str,
                bring_sw_str
@@ -877,7 +868,6 @@ static void estats_lprint(exact_stats_t* stats,
         );
 
     }
-
 }
 
 
@@ -899,7 +889,7 @@ exact_stats_sample_t estats_sample_delta(exact_stats_t* stats,
         }
         res.lthread[i] = lthread_stats_sub(&lhs->lthread[i], &rhs->lthread[i]);
         res.nic_hw[i]  = nic_stats_hw_sub(&lhs->nic_hw[i], &rhs->nic_hw[i]);
-        strncpy(res.nic_hw[i].name,lhs->nic_hw[i].name,sizeof(res.nic_hw[i].name));
+        res.nic_hw[i].name = lhs->nic_hw[i].name;
     }
 
     for(ch_word i = 0; i < lcount * wcount; i++)

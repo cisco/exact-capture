@@ -82,7 +82,7 @@ typedef struct nic_stats_hw
     uint32_t rx_ignored_count;
     uint32_t rx_error_count;
     uint32_t rx_dropped_count;
-    char name[16];
+    char* name;
 } nic_stats_hw_t;
 
 #endif /* EXACTIO_EXA_H_ */
