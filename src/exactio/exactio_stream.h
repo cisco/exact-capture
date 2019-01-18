@@ -22,8 +22,8 @@
 #include <stdio.h>
 
 #include <chaste/utils/util.h>
+#include "../data_structs/exact_stat_hdr.h"
 #include "../data_structs/timespecps.h"
-#include "../data_structs/exact_stat_descr.h"
 
 //This compile out checks that aren't strictly necessary
 #ifdef NOIFASSERT
@@ -75,8 +75,8 @@ typedef struct exactio_stream_interface_s{
     //----------------
     eio_error_t (*read_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz);
     eio_error_t (*read_release)(eio_stream_t* this);
-    eio_error_t (*read_sw_stats)(eio_stream_t* this,void** stats,  exact_stats_descr_t** stats_descr);
-    eio_error_t (*read_hw_stats)(eio_stream_t* this,void** stats,  exact_stats_descr_t** stats_descr);
+    eio_error_t (*read_sw_stats)(eio_stream_t* this,void** stats,  exact_stats_hdr_t** stats_hdr);
+    eio_error_t (*read_hw_stats)(eio_stream_t* this,void** stats,  exact_stats_hdr_t** stats_hdr);
 
 
     //Write operations
@@ -85,8 +85,8 @@ typedef struct exactio_stream_interface_s{
     //for write_release len is zero, the frame the data is not committed
     eio_error_t (*write_acquire)(eio_stream_t* this, char** buffer, int64_t* len);
     eio_error_t (*write_release)(eio_stream_t* this, int64_t len);
-    eio_error_t (*write_sw_stats)(eio_stream_t* this,void** stats, exact_stats_descr_t** stats_descr);
-    eio_error_t (*write_hw_stats)(eio_stream_t* this,void** stats, exact_stats_descr_t** stats_descr);
+    eio_error_t (*write_sw_stats)(eio_stream_t* this,void** stats, exact_stats_hdr_t** stats_hdr);
+    eio_error_t (*write_hw_stats)(eio_stream_t* this,void** stats, exact_stats_hdr_t** stats_hdr);
 
     //Auxilary Operations
     //----------------

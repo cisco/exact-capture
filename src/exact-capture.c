@@ -349,12 +349,15 @@ eio_stream_t* alloc_nic(char* iface, bool use_dummy)
         /* Replace the input stream with a dummy stream */
         ch_log_debug1("Creating null output stream in place of exanic name: %s\n",
                       iface);
+        int namelen = snprintf(NULL,0,"dummy nic:%s", iface );
         args.type = EIO_DUMMY;
         args.args.dummy.read_buff_size = 64;
         args.args.dummy.rd_mode = DUMMY_MODE_EXANIC;
         args.args.dummy.exanic_pkt_bytes = args.args.dummy.read_buff_size;
         args.args.dummy.write_buff_size = 0;   /* We don't write to this stream */
-        args.args.dummy.name = iface;
+        args.args.dummy.name = calloc(namelen+1,1);
+        snprintf(args.args.dummy.name,namelen+1,"dummy nic:%s", iface );
+
         err = eio_new (&args, &istream);
         if (err)
         {
@@ -405,10 +408,13 @@ eio_stream_t* alloc_disk(char* filename, bool use_dummy, int64_t max_file_size)
         {
             ch_log_debug1("Creating null output stream in place of disk name: %s\n",
                         filename);
+            int namelen = snprintf(NULL,0,"dummy file:%s", filename );
             args.type = EIO_DUMMY;
             args.args.dummy.read_buff_size = 0;   /* We don't read this stream */
             args.args.dummy.write_buff_size = write_buff_size;
-            args.args.dummy.name = filename;
+            args.args.dummy.name = calloc(namelen+1,1);
+            snprintf(args.args.dummy.name,namelen+1,"dummy file:%s", filename );
+
             err = eio_new (&args, &ostream);
             if (err)
             {
@@ -444,10 +450,11 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
     bzero(&args,sizeof(args));
     eio_stream_t* iostream = NULL;
 
-    int namelen = snprintf(NULL,0,"%s:%s", iface, fname );
+
 
     if(use_dummy)
     {
+        int namelen = snprintf(NULL,0,"dummy ring:%s->%s", iface, fname );
         args.type = EIO_DUMMY;
         args.args.dummy.write_buff_size = BRING_SLOT_SIZE;
         args.args.dummy.read_buff_size  = BRING_SLOT_SIZE;
@@ -456,7 +463,7 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
         args.args.dummy.name            = calloc(1,namelen + 1);
         args.args.dummy.id_major        = id_major;
         args.args.dummy.id_minor        = id_minor;
-        snprintf(args.args.dummy.name, 128, "%s:%s", iface, fname);
+        snprintf(args.args.dummy.name, namelen+1, "dummy ring:%s:%s", iface, fname);
 
         ch_log_debug1("Creating dummy ring %s with write_size=%li, read_sizet=%li\n",
                       args.args.dummy.name,
@@ -473,6 +480,7 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
     }
     else
     {
+        int namelen = snprintf(NULL,0,"%s:%s", iface, fname );
         args.type = EIO_BRING;
         /* This must be a multiple of the disk block size (assume 4kB)*/
         args.args.bring.slot_size          = BRING_SLOT_SIZE;
@@ -482,8 +490,7 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
         args.args.bring.id_minor           = id_minor;
         args.args.bring.use_huge_pages     = use_huge_pages;
         args.args.bring.use_memory_locking = use_mem_locking;
-
-        snprintf(args.args.bring.name, 128, "%s:%s", iface, fname);
+        snprintf(args.args.bring.name, namelen+1, "%s:%s", iface, fname);
 
         ch_log_debug1("Creating ring %s with slots=%li, slot_count=%li\n",
                       args.args.bring.name,

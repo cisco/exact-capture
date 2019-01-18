@@ -8,8 +8,8 @@
  *  Definition of the exact capture statistics descriptors
  */
 
-#ifndef SRC_DATA_STRUCTS_EXACT_STAT_DESCR_H_
-#define SRC_DATA_STRUCTS_EXACT_STAT_DESCR_H_
+#ifndef SRC_DATA_STRUCTS_EXACT_STAT_HDR_H_
+#define SRC_DATA_STRUCTS_EXACT_STAT_HDR_H_
 
 #include <stdint.h>
 
@@ -40,7 +40,7 @@ typedef struct
     char hname[256]; //Human readable name
     exact_stats_units_t unit;
     int64_t radix;
-} exact_stats_descr_t;
+} exact_stats_hdr_t;
 
 
-#endif /* SRC_DATA_STRUCTS_EXACT_STAT_DESCR_H_ */
+#endif /* SRC_DATA_STRUCTS_EXACT_STAT_HDR_H_ */

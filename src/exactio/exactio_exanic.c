@@ -35,7 +35,7 @@
 #include <chaste/log/log.h>
 
 #include "exactio_timing.h"
-#include "../data_structs/exact_stat_descr.h"
+#include <data_structs/exact_stat_hdr.h>
 
 
 #include "exactio_exanic.h"
@@ -53,7 +53,7 @@ typedef struct nic_stats_hw
     int64_t rx_dropped_count;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_hw_t;
 
-static exact_stats_descr_t exanic_stats_hw_desc[7] =
+static exact_stats_hdr_t exanic_stats_hw_hdr[7] =
 {
     {EXACT_STAT_TYPE_STR,   "exanic_hw_device",            "ExaNIC HW device",           EXACT_STAT_UNIT_NAME,    0},
     {EXACT_STAT_TYPE_INT64, "exanic_hw_tx_count",          "ExaNIC HW tx count",         EXACT_STAT_UNIT_PACKETS, 1},
@@ -78,7 +78,7 @@ typedef struct nic_stats_sw_rx
     int64_t hwofl;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_sw_rx_t;
 
-static exact_stats_descr_t exanic_stats_sw_rx_desc[11] =
+static exact_stats_hdr_t exanic_stats_sw_rx_hdr[11] =
 {
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_spins_first",  "ExaNIC SW first chunk spin count",       EXACT_STAT_UNIT_COUNT,    1},
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_spins_more",   "ExaNIC SW remaining chunks spin count",  EXACT_STAT_UNIT_COUNT,    1},
@@ -100,7 +100,7 @@ typedef struct nic_stats_sw_tx
     int64_t bytes_tx;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_sw_tx_t;
 
-static exact_stats_descr_t exanic_stats_sw_tx_desc[3] =
+static exact_stats_hdr_t exanic_stats_sw_tx_hdr[3] =
 {
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_packets_rt",   "EXANIC SW tx frames", EXACT_STAT_UNIT_PACKETS, 1},
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_bytes_tx",     "EXANIC SW tx bytes",  EXACT_STAT_UNIT_BYTES,   1},
@@ -592,7 +592,7 @@ static inline eio_error_t exa_read_release(eio_stream_t* this)
 
 
 static inline eio_error_t exa_read_sw_stats(eio_stream_t* this,void** stats,
-                                            exact_stats_descr_t** stats_descr)
+                                            exact_stats_hdr_t** stats_hdr)
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -600,7 +600,7 @@ static inline eio_error_t exa_read_sw_stats(eio_stream_t* this,void** stats,
     }
 
     *stats       = &priv->stats_sw_rx;
-    *stats_descr = exanic_stats_sw_rx_desc;
+    *stats_hdr = exanic_stats_sw_rx_hdr;
 
     return EIO_ENONE;
 }
@@ -609,7 +609,7 @@ static inline eio_error_t exa_read_sw_stats(eio_stream_t* this,void** stats,
 
 static inline eio_error_t exa_read_hw_stats(eio_stream_t* this,
                                             void** stats,
-                                            exact_stats_descr_t** stats_descr)
+                                            exact_stats_hdr_t** stats_hdr)
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -632,7 +632,7 @@ static inline eio_error_t exa_read_hw_stats(eio_stream_t* this,
     nic_hw_stats->device = this->name;
 
     *stats       = nic_hw_stats;
-    *stats_descr = exanic_stats_hw_desc;
+    *stats_hdr = exanic_stats_hw_hdr;
     return err;
 }
 
@@ -710,7 +710,7 @@ static eio_error_t exa_write_release(eio_stream_t* this, int64_t len)
 
 
 static inline eio_error_t exa_write_sw_stats(eio_stream_t* this,void** stats,
-                                             exact_stats_descr_t** stats_descr)
+                                             exact_stats_hdr_t** stats_hdr)
 {
 
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
@@ -719,14 +719,14 @@ static inline eio_error_t exa_write_sw_stats(eio_stream_t* this,void** stats,
     }
 
     *stats       = &priv->stats_sw_tx;
-    *stats_descr = exanic_stats_sw_tx_desc;
+    *stats_hdr = exanic_stats_sw_tx_hdr;
 
     return EIO_ENONE;
 }
 
 
 static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void** stats,
-        exact_stats_descr_t** stats_descr)
+        exact_stats_hdr_t** stats_hdr)
 
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
@@ -750,7 +750,7 @@ static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void** stats,
     nic_hw_stats->device = this->name;
 
     *stats       = nic_hw_stats;
-    *stats_descr = exanic_stats_hw_desc;
+    *stats_hdr = exanic_stats_hw_hdr;
     return err;
 }
 

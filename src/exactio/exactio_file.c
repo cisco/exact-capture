@@ -48,7 +48,7 @@ typedef struct file_stats_sw_rd
     char* name;
 } __attribute__((packed)) __attribute__((aligned(8))) file_stats_sw_rd_t;
 
-static exact_stats_descr_t file_stats_sw_rd_desc[5] =
+static exact_stats_hdr_t file_stats_sw_rd_hdr[5] =
 {
    {EXACT_STAT_TYPE_INT64, "file_rd_count", "File read count",          EXACT_STAT_UNIT_COUNT, 1},
    {EXACT_STAT_TYPE_INT64, "file_rd_bytes", "File read bytes",          EXACT_STAT_UNIT_BYTES, 1},
@@ -66,7 +66,7 @@ typedef struct file_stats_sw_wr
     char* name;
 } __attribute__((packed)) __attribute__((aligned(8))) file_stats_sw_wr_t;
 
-static exact_stats_descr_t file_stats_sw_wr_desc[5] =
+static exact_stats_hdr_t file_stats_sw_wr_hdr[5] =
 {
    {EXACT_STAT_TYPE_INT64, "file_sw_wr_count", "File SW write count",     EXACT_STAT_UNIT_COUNT, 1},
    {EXACT_STAT_TYPE_INT64, "file_sw_wr_bytes", "File SW write bytes",     EXACT_STAT_UNIT_BYTES, 1},
@@ -83,7 +83,7 @@ typedef struct file_stats_hw_wr
     int64_t bytes_available;
 } __attribute__((packed)) __attribute__((aligned(8))) file_stats_hw_wr_t;
 
-static exact_stats_descr_t file_stats_hw_wr_desc[5] =
+static exact_stats_hdr_t file_stats_hw_wr_hdr[5] =
 {
    {EXACT_STAT_TYPE_STR,   "file_hw_filesystem", "File HW filesystem",      EXACT_STAT_UNIT_NAME, 1},
    {EXACT_STAT_TYPE_INT64, "file_hw_wr_count",   "File HW total space",     EXACT_STAT_UNIT_BYTES, 1},
@@ -393,7 +393,7 @@ static eio_error_t file_read_release(eio_stream_t* this)
 
 
 static inline eio_error_t file_read_sw_stats(eio_stream_t* this,void** stats,
-                                             exact_stats_descr_t** stats_descr)
+                                             exact_stats_hdr_t** stats_hdr)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -401,17 +401,17 @@ static inline eio_error_t file_read_sw_stats(eio_stream_t* this,void** stats,
     }
 
     *stats       = &priv->stats_sw_rd;
-    *stats_descr = file_stats_sw_rd_desc;
+    *stats_hdr = file_stats_sw_rd_hdr;
 
     return EIO_ENONE;
 }
 
 static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void** stats,
-                                             exact_stats_descr_t** stats_descr)
+                                             exact_stats_hdr_t** stats_hdr)
 {
     (void)this;
     (void)stats;
-    (void)stats_descr;
+    (void)stats_hdr;
 	return EIO_ENOTIMPL;
 }
 
@@ -547,7 +547,7 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len)
 
 
 static inline eio_error_t file_write_sw_stats(eio_stream_t* this,void** stats,
-        exact_stats_descr_t** stats_descr)
+        exact_stats_hdr_t** stats_hdr)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -556,14 +556,14 @@ static inline eio_error_t file_write_sw_stats(eio_stream_t* this,void** stats,
 
     priv->stats_sw_wr.name = this->name;
     *stats       = &priv->stats_sw_wr;
-    *stats_descr = file_stats_sw_wr_desc;
+    *stats_hdr = file_stats_sw_wr_hdr;
 
     return EIO_ENONE;
 }
 
 
 static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void** stats,
-                                              exact_stats_descr_t** stats_descr)
+                                              exact_stats_hdr_t** stats_hdr)
 {
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -601,7 +601,7 @@ static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void** stats,
     //Todo - run NVMe CTL here for temps etc
 
     *stats       = &priv->stats_hw_wr;
-    *stats_descr = file_stats_hw_wr_desc;
+    *stats_hdr = file_stats_hw_wr_hdr;
 
 	return EIO_ENONE;
 }

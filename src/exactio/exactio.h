@@ -68,15 +68,15 @@ static inline eio_error_t eio_rd_rel(eio_stream_t* this)
 }
 
 static inline eio_error_t eio_rd_sw_stats(eio_stream_t* this, void** stats,
-                                          exact_stats_descr_t** stats_descr)
+                                          exact_stats_hdr_t** stats_hdr)
 {
-    return this->vtable.read_sw_stats(this, stats, stats_descr);
+    return this->vtable.read_sw_stats(this, stats, stats_hdr);
 }
 
 static inline eio_error_t eio_rd_hw_stats(eio_stream_t* this, void** stats,
-                                          exact_stats_descr_t** stats_descr)
+                                          exact_stats_hdr_t** stats_hdr)
 {
-    return this->vtable.read_hw_stats(this, stats, stats_descr);
+    return this->vtable.read_hw_stats(this, stats, stats_hdr);
 }
 
 
@@ -93,15 +93,15 @@ static inline eio_error_t eio_wr_rel(eio_stream_t* this, int64_t len)
 }
 
 static inline eio_error_t eio_wr_sw_stats(eio_stream_t* this, void** stats,
-                                          exact_stats_descr_t** stats_descr)
+                                          exact_stats_hdr_t** stats_hdr)
 {
-    return this->vtable.write_sw_stats(this, stats, stats_descr);
+    return this->vtable.write_sw_stats(this, stats, stats_hdr);
 }
 
 static inline eio_error_t eio_wr_hw_stats(eio_stream_t* this, void** stats,
-                                          exact_stats_descr_t** stats_descr)
+                                          exact_stats_hdr_t** stats_hdr)
 {
-    return this->vtable.write_hw_stats(this, stats, stats_descr);
+    return this->vtable.write_hw_stats(this, stats, stats_hdr);
 }
 
 

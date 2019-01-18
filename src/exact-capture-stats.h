@@ -9,9 +9,9 @@
 #define SRC_EXACT_CAPTURE_STATS_H_
 
 #include <chaste/types/types.h>
+#include "data_structs/exact_stat_hdr.h"
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
-#include "data_structs/exact_stat_descr.h"
 
 typedef struct exact_capture_stats_sample {
 
@@ -30,17 +30,17 @@ typedef struct exact_capture_stats_sample {
     void* file_sw_wr[MAX_WTHREADS];
     void* file_hw_wr[MAX_WTHREADS];
 
-    exact_stats_descr_t* nic_sw_descr[MAX_LTHREADS];
-    exact_stats_descr_t* nic_hw_descr[MAX_LTHREADS];
+    exact_stats_hdr_t* nic_sw_hdr[MAX_LTHREADS];
+    exact_stats_hdr_t* nic_hw_hdr[MAX_LTHREADS];
 
-    exact_stats_descr_t* bring_hw_wr_descr[MAX_LWCONNS];
-    exact_stats_descr_t* bring_sw_wr_descr[MAX_LWCONNS];
+    exact_stats_hdr_t* bring_hw_wr_hdr[MAX_LWCONNS];
+    exact_stats_hdr_t* bring_sw_wr_hdr[MAX_LWCONNS];
 
-    exact_stats_descr_t* bring_hw_rd_descr[MAX_LWCONNS];
-    exact_stats_descr_t* bring_sw_rd_descr[MAX_LWCONNS];
+    exact_stats_hdr_t* bring_hw_rd_hdr[MAX_LWCONNS];
+    exact_stats_hdr_t* bring_sw_rd_hdr[MAX_LWCONNS];
 
-    exact_stats_descr_t* file_sw_wr_descr[MAX_WTHREADS];
-    exact_stats_descr_t* file_hw_wr_descr[MAX_WTHREADS];
+    exact_stats_hdr_t* file_sw_wr_hdr[MAX_WTHREADS];
+    exact_stats_hdr_t* file_hw_wr_hdr[MAX_WTHREADS];
 
 }  exact_stats_sample_t;
 

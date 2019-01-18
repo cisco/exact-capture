@@ -64,7 +64,7 @@ typedef struct bring_hw_stats
    int64_t stime; //kernel mode time in clock ticks
 } __attribute__((packed)) __attribute__((aligned(8))) bring_stats_hw_t;
 
-static exact_stats_descr_t bring_stats_hw_desc[5] =
+static exact_stats_hdr_t bring_stats_hw_hdr[5] =
 {
     {EXACT_STAT_TYPE_INT64, "bring_minflt", "Minor page faults", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "bring_majflt", "Major page faults", EXACT_STAT_UNIT_COUNT, 1},
@@ -81,7 +81,7 @@ typedef struct rdwr_bring_sw_stats
     int64_t rl_bytes; //Bytes released
 } __attribute__((packed)) __attribute__((aligned(8))) bring_stats_sw_t;
 
-static exact_stats_descr_t bring_stats_sw_desc[5] =
+static exact_stats_hdr_t bring_stats_sw_hdr[5] =
 {
     {EXACT_STAT_TYPE_INT64, "aq_miss",  "Ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",   "Ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
@@ -278,11 +278,13 @@ static inline eio_error_t bring_read_release(eio_stream_t* this)
 }
 
 static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void** stats,
-                                              exact_stats_descr_t** stats_descr)
+                                              exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     *stats = &priv->stats_sw_rd;
-    *stats_descr = bring_stats_sw_desc;
+    *stats_hdr = bring_stats_sw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_sw_rd,  bring_stats_sw_hdr );
+
 	return EIO_ENONE;
 }
 
@@ -360,7 +362,7 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp,
 
 static inline eio_error_t bring_read_hw_stats(eio_stream_t* this,
                                               void** stats,
-                                              exact_stats_descr_t** stats_descr)
+                                              exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     eio_error_t err = bring_hw_stats(&priv->rd_pid,
@@ -368,8 +370,8 @@ static inline eio_error_t bring_read_hw_stats(eio_stream_t* this,
                           &priv->stats_hw_rd);
 
     *stats = &priv->stats_hw_rd;
-    *stats_descr = bring_stats_hw_desc;
-
+    *stats_hdr = bring_stats_hw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_hw_rd,  bring_stats_hw_hdr );
     return err;
 }
 
@@ -482,17 +484,19 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len)
 }
 
 static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void** stats,
-                                               exact_stats_descr_t** stats_descr)
+                                               exact_stats_hdr_t** stats_hdr)
 {
-    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    *stats = &priv->stats_sw_wr;
-    *stats_descr = bring_stats_sw_desc;
 
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    *stats = &priv->stats_sw_wr;
+    *stats_hdr = bring_stats_sw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_sw_wr,  bring_stats_sw_hdr );
     return EIO_ENONE;
 }
 
 static inline eio_error_t bring_write_hw_stats(eio_stream_t* this,  void** stats,
-                                               exact_stats_descr_t** stats_descr)
+                                               exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     eio_error_t err = bring_hw_stats(&priv->wr_pid,
@@ -500,8 +504,8 @@ static inline eio_error_t bring_write_hw_stats(eio_stream_t* this,  void** stats
                           &priv->stats_hw_wr);
 
     *stats = &priv->stats_hw_wr;
-    *stats_descr = bring_stats_hw_desc;
-
+    *stats_hdr = bring_stats_hw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_hw_wr,  bring_stats_hw_hdr );
     return err;
 }
 
