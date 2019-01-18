@@ -201,12 +201,14 @@ void* listener_thread (void* params)
     eio_nowns (&now);
     int64_t timeout = now + maxwaitns; //100ms timeout
 
-    int64_t dropped = 0;
     int64_t packet_seq = 0;
+    int64_t dropped    = 0;
 
     const int64_t blaze_hdr_size = (int64_t)sizeof(blaze_hdr_t);
     const int64_t max_blaze_rec = lparams->snaplen + blaze_hdr_size;
+    const int64_t min_blaze_rec = blaze_hdr_size;
 
+    int64_t tryagain_counter = 0;
 
     while (!*lparams->stop){
         /*
@@ -214,8 +216,8 @@ void* listener_thread (void* params)
          * the writer thread and then obtain a new output buffer. It does so in
          * one of 2 circumstances:
          *
-         * 1) There is less than 1 full packet plus a pcap_pkt_hdr_t left worth
-         * of space in the output buffer. The pcap_pkthdr_t is required to ensure
+         * 1) There is less than 1 full packet plus a blaze_pkt_hdr_t left worth
+         * of space in the output buffer. The blaze_pkthdr_t is required to ensure
          * there is enough space for a dummy packet to pad out the rest of this
          * buffer to be block aligned size for high speed writes to disk.
          *
@@ -260,6 +262,8 @@ void* listener_thread (void* params)
                 err = eio_rd_acq(nic, NULL, NULL, NULL, NULL);
                 iflikely(err == EIO_EFRAME_DRP){
                     packet_seq++;
+                    dropped++;
+
                 }
                 err = eio_rd_rel(nic);
             }
@@ -269,37 +273,95 @@ void* listener_thread (void* params)
             goto finished;
         }
 
-        /* This func tries to rx one packet it returns the number of bytes RX'd
-         * this may be zero if no packet was RX'd, or if there was an error */
-        eio_error_t err  = eio_rd_acq(nic,
-                                      obuff + bytes_added, obuff + obuff_len,
-                                      &dropped, &packet_seq,
-                                           lparams->stop,
-                                           lparams->snaplen);
 
-        ifunlikely(rx_bytes == 0)
-        {
-            /*Do this here so we don't do it too often. Only when we're
-             * waiting around with nothing to do */
-            eio_nowns(&now);
+        /* Try to RX one packet. Deal with any errors */
+
+        blaze_hdr_t* hdr = (blaze_hdr_t*) (obuff);
+        bytes_added += sizeof(blaze_hdr_t);
+        const int64_t obuff_remain = obuff_len - bytes_added - min_blaze_rec;
+        const int64_t max_rx_bytes = MIN(lparams->snaplen, obuff_remain);
+
+        int64_t rx_bytes   = max_rx_bytes;
+        char* buffer       = obuff + bytes_added;
+        int64_t rx_time    = 0;
+        int64_t rx_time_hz = 0;
+        eio_error_t err_aq = eio_rd_acq(nic, &buffer, &rx_bytes, &rx_time, &rx_time_hz);
+
+        //Since we are supplying the buffer to rd_acq(), we can "release" it
+        //immediately
+        eio_error_t err_rl = eio_rd_rel(nic);
+        if(err_rl == EIO_ESWOVFL || err_aq == EIO_ESWOVFL){
+            //Unwind the header;
+            bytes_added -= sizeof(blaze_hdr_t);
+            continue;
         }
-        ifassert(rx_bytes > max_blaze_rec)
-        {
-            ch_log_fatal("RX %liB > full packet size %li\n",
-                         rx_bytes, max_blaze_rec);
 
+        switch(err_aq){
+            case EIO_ETRYAGAIN:{
+                //Unwind the header;
+                bytes_added -= sizeof(blaze_hdr_t);
+                tryagain_counter++;
+                ifunlikely(tryagain_counter > 1000){
+                    /* Do this here so we don't do it too often. Only when we're
+                     * waiting around with nothing to do (eg 1000 try again's in
+                     * a row)*/
+                    eio_nowns(&now);
+                    tryagain_counter = 0;
+                }
+                continue;
+            }
+
+            //At this point, we know we got a frame, we're just not sure how good it is...
+            case EIO_ENONE:      hdr->flags = BLAZE_FLAG_NONE;   break;
+            case EIO_EFRAME_ABT: hdr->flags = BLAZE_FLAG_ABRT;   break;
+            case EIO_EFRAME_CPT: hdr->flags = BLAZE_FLAG_CRPT;   break;
+            case EIO_EFRAME_HWO: hdr->flags = BLAZE_FLAG_HWOVFL; break;
+            case EIO_EFRAME_TRC: hdr->flags = BLAZE_FLAG_TRNC;   break;
+            case EIO_EFRAME_TRC_ABT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
+            case EIO_EFRAME_TRC_CPT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
+            case EIO_EFRAME_TRC_HWO: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
+
+            default:
+                ch_log_fatal("Unexpected error type %i\n", err_aq);
         }
 
+        switch(err_aq){
+            //Fully received frames
+            case EIO_ENONE:
+            case EIO_EFRAME_ABT:
+            case EIO_EFRAME_CPT:
+            case EIO_EFRAME_HWO:
+                hdr->caplen  = rx_bytes;
+                hdr->wirelen = rx_bytes;
+                break;
+
+            //Truncated frames
+            case EIO_EFRAME_TRC:
+            case EIO_EFRAME_TRC_ABT:
+            case EIO_EFRAME_TRC_CPT:
+            case EIO_EFRAME_TRC_HWO:
+                hdr->caplen  = max_rx_bytes;
+                hdr->wirelen = rx_bytes;
+                break;
+            default:
+                ch_log_fatal("Unexpected error type %i\n", err_aq);
+        }
+
+        //The rest of the header details
+        hdr->ts      = rx_time;
+        hdr->hz      = rx_time_hz;
+        hdr->dev     = dev_id;
+        hdr->port    = port_id;
+        hdr->seq     = packet_seq;
+        hdr->dropped = dropped;
+
+        //Clean up the accounting
+        dropped = 0;
         bytes_added += rx_bytes;
 
-        ifassert(bytes_added > obuff_len)
-        {
-            ch_log_fatal("Wrote beyond end of buffer %li > %li\n",
-                         rx_bytes, obuff_len);
+        ifassert(bytes_added > obuff_len){
+            ch_log_fatal("Wrote beyond end of buffer %li > %li\n", rx_bytes, obuff_len);
         }
-
-
-
 
     }
 

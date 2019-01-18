@@ -37,8 +37,7 @@ typedef enum blaze_flags{
     BLAZE_FLAG_ABRT    = 0x02, //Frame aborted (on the wire)
     BLAZE_FLAG_CRPT    = 0x04, //Frame corrupt (CRC is wrong)
     BLAZE_FLAG_TRNC    = 0x08, //Frame truncated
-    BLAZE_FLAG_SWOVFL  = 0x10, //A software overflow happened
-    BLAZE_FLAG_HWOVFL  = 0x20, //A hardware overflow happened
+    BLAZE_FLAG_HWOVFL  = 0x10, //A hardware overflow happened
 
 } blaze_flags_t;
 

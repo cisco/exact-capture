@@ -95,7 +95,6 @@ typedef struct exactio_dummy_priv_s {
     int64_t segs;
 
     int64_t exanic_pkt_size;
-    int64_t exanic_bytes_read;
 
     int64_t rd_mode;
 
@@ -176,22 +175,8 @@ static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t
     }
 
     if(priv->rd_mode == DUMMY_MODE_EXANIC){
-        const int64_t remain = priv->exanic_pkt_size - priv->exanic_bytes_read;
-        ch_log_debug3("remain=%li, pkt_size=%li, bytes_read=%li\n",
-                    remain,
-                    priv->exanic_pkt_size,
-                    priv->exanic_bytes_read);
-        if(remain > EXANIC_DATA_CHUNK_SIZE ){
-           priv->exanic_bytes_read += EXANIC_DATA_CHUNK_SIZE;
-           *len = EXANIC_DATA_CHUNK_SIZE;
-           result = EIO_EFRAG_MOR;
-           priv->stats_nic_rd.rx_bytes += EXANIC_DATA_CHUNK_SIZE;
-        }
-        else{
-           priv->exanic_bytes_read = 0;
-           *len = remain;
-           priv->stats_nic_rd.rx_packets += 1;
-       }
+       *len = priv->exanic_pkt_size;
+       priv->stats_nic_rd.rx_packets += 1;
     }
     else{
         *len    = priv->read_buff_size;
