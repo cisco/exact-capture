@@ -371,7 +371,6 @@ eio_stream_t* alloc_nic(char* iface, bool use_dummy, int64_t snaplen  )
         args.args.exa.kernel_bypass   = options.no_kernel;
         args.args.exa.promisc         = !options.no_promisc;
         args.args.exa.clear_buff      = options.clear_buff;
-        args.args.exa.snaplen         = snaplen;
         eio_new (&args, &istream);
         if (err)
         {

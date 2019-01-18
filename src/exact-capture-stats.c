@@ -23,8 +23,6 @@
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
 
-#include "exact-capture-stats-math.h"
-
 #include "exact-capture.h"
 #include "utils.h"
 
@@ -924,10 +922,10 @@ void estats_output(exact_stats_t* stats, exact_stats_sample_t* now, exact_stats_
     exact_stats_sample_t delta = estats_sample_delta(stats, now, prev );
     for(int64_t l = 0; l < stats->lcount; l++)
     {
-        listen_stats_t* listen_sw      = &delta.lthread[l];
-        nic_stats_hw_t* nic_hw         = &delta.nic_hw[l];
-        bring_stats_hw_t* bring_hw_wr = &delta.bring_hw_wr[l];
-        bring_stats_sw_t* bring_sw_wr = &delta.bring_sw_wr[l];
+        void* nic_sw      = delta.nic_sw[l];
+        void* nic_hw      = delta.nic_hw[l];
+        void* bring_hw_wr = delta.bring_hw_wr[l];
+        void* bring_sw_wr = delta.bring_sw_wr[l];
         estats_lprint(stats, listen_sw, nic_hw, bring_sw_wr, bring_hw_wr, delta.time_ns, l);
     }
 
@@ -956,20 +954,18 @@ void estats_take_sample(exact_stats_t* stats, exact_stats_sample_t* sample)
     sample->time_ns = time_now_ns();
 
     //Gather all listener statistics
-    for(int l = 0; l < lcount; l++)
-    {
+    for(int l = 0; l < lcount; l++){
         lparams_t* lparams = &stats->lparams_list[l];
         eio_stream_t* nic_istream  = lparams->nic_istream;
 
-        sample->lthread[l] = lparams->stats;
-        eio_rd_hw_stats(nic_istream, &sample->nic_hw[l]);
+        eio_rd_sw_stats(nic_istream, &sample->nic_sw[l],&sample->nic_sw_descr[l] );
+        eio_rd_hw_stats(nic_istream, &sample->nic_hw[l],&sample->nic_hw_descr[l] );
 
-        for(int w = 0; w < wcount; w++)
-        {
+        for(int w = 0; w < wcount; w++){
             //Listener thread writes to bring, so we need wr stats here
             eio_stream_t* ring_ostream = lparams->rings[l * wcount + w];
-            eio_wr_hw_stats(ring_ostream, &sample->bring_hw_wr[l * wcount + w]);
-            eio_wr_sw_stats(ring_ostream, &sample->bring_sw_wr[l * wcount + w]);
+            eio_wr_sw_stats(ring_ostream, &sample->bring_sw_wr[l * wcount + w],  &sample->bring_sw_wr_descr[l * wcount + w]);
+            eio_wr_hw_stats(ring_ostream, &sample->bring_hw_wr[l * wcount + w],  &sample->bring_hw_wr_descr[l * wcount + w]);
         }
     }
 
@@ -978,14 +974,15 @@ void estats_take_sample(exact_stats_t* stats, exact_stats_sample_t* sample)
     {
         wparams_t* wparams = &stats->wparams_list[w];
         eio_stream_t* disk_ostream  = wparams->disk_ostream;
-        eio_wr_sw_stats(disk_ostream, &sample->file_sw_wr[w]);
+        eio_wr_sw_stats(disk_ostream, &sample->file_sw_wr[w], &sample->file_sw_wr_descr[w]);
+        eio_wr_sw_stats(disk_ostream, &sample->file_hw_wr[w], &sample->file_hw_wr_descr[w]);
 
         for(int l = 0; l < lcount; l++)
         {
             //Writer thread reads from bring, so we need rd stats here
             eio_stream_t* ring_istream = wparams->rings[w * lcount + l];
-            eio_rd_hw_stats(ring_istream, &sample->bring_hw_rd[w * lcount + l]);
-            eio_rd_sw_stats(ring_istream, &sample->bring_sw_rd[w * lcount + l]);
+            eio_rd_sw_stats(ring_istream, &sample->bring_sw_rd[w * lcount + l], &sample->bring_sw_rd_descr[w * lcount + l]);
+            eio_rd_hw_stats(ring_istream, &sample->bring_hw_rd[w * lcount + l], &sample->bring_hw_rd_descr[w * lcount + l]);
         }
     }
 

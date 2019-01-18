@@ -11,26 +11,36 @@
 #include <chaste/types/types.h>
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
+#include "data_structs/exact_stat_descr.h"
 
 typedef struct exact_capture_stats_sample {
 
     int64_t time_ns;  //Time at which sampling began
     int64_t delay_ns; //Time it took to collect sample
 
-    //Really this should be removed and replaced with NIC sw stats
-    listen_stats_t lthread[MAX_LTHREADS];
+    void* nic_sw[MAX_LTHREADS];
+    void* nic_hw[MAX_LTHREADS];
 
-    //nic_stats_sw_t nic_sw[MAX_LTHREADS]; -- placeholder
-    nic_stats_hw_t nic_hw[MAX_LTHREADS];
+    void* bring_hw_wr[MAX_LWCONNS];
+    void* bring_sw_wr[MAX_LWCONNS];
 
-    bring_stats_hw_t bring_hw_wr[MAX_LWCONNS];
-    bring_stats_sw_t bring_sw_wr[MAX_LWCONNS];
+    void* bring_hw_rd[MAX_LWCONNS];
+    void* bring_sw_rd[MAX_LWCONNS];
 
-    bring_stats_hw_t bring_hw_rd[MAX_LWCONNS];
-    bring_stats_sw_t bring_sw_rd[MAX_LWCONNS];
+    void* file_sw_wr[MAX_WTHREADS];
+    void* file_hw_wr[MAX_WTHREADS];
 
-    file_stats_sw_rdwr_t file_sw_wr[MAX_WTHREADS];
-    //file_stats_hw_t file_hw_wr[MAX_WTHREADS]; -- placeholder
+    exac_stats_descr_t* nic_sw_descr[MAX_LTHREADS];
+    exac_stats_descr_t* nic_hw_descr[MAX_LTHREADS];
+
+    exac_stats_descr_t* bring_hw_wr_descr[MAX_LWCONNS];
+    exac_stats_descr_t* bring_sw_wr_descr[MAX_LWCONNS];
+
+    exac_stats_descr_t* bring_hw_rd_descr[MAX_LWCONNS];
+    exac_stats_descr_t* bring_sw_rd_descr[MAX_LWCONNS];
+
+    exac_stats_descr_t* file_sw_wr_descr[MAX_WTHREADS];
+    exac_stats_descr_t* file_hw_wr_descr[MAX_WTHREADS];
 
 }  exact_stats_sample_t;
 
@@ -39,8 +49,10 @@ typedef struct exact_capture_stats {
 
     lparams_t* lparams_list;
     ch_word lcount;
+
     wparams_t* wparams_list;
     ch_word wcount;
+
     bool verbose;
     ch_word more_verbose_lvl;
 

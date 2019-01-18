@@ -22,15 +22,8 @@
 #include "data_structs/blaze_file.h"
 #include "utils.h"
 
-
-static __thread int64_t dev_id;
-static __thread int64_t port_id;
-static __thread listen_stats_t* stats;
-
 static inline void add_dummy_packet(char* obuff, int64_t dummy_rec_len)
 {
-
-
     const int64_t dummy_payload_len = dummy_rec_len - sizeof(blaze_hdr_t);
 
     ch_log_debug1("Adding dummy of blaze record of len=%li (payload=%li) to %p\n",
@@ -45,7 +38,6 @@ static inline void add_dummy_packet(char* obuff, int64_t dummy_rec_len)
     dummy_hdr->wirelen = 0; /*This is an invalid dummy packet, 0 wire length */
 
     obuff += dummy_payload_len;
-
 }
 
 
@@ -177,8 +169,9 @@ void* listener_thread (void* params)
     const int64_t ltid = lparams->ltid; /* Listener thread id */
 
     /* Thread local storage parameters */
+    int64_t dev_id;
+    int64_t port_id;
     eio_get_id(lparams->nic_istream, &dev_id, &port_id);
-    stats  = &lparams->stats;
 
     eio_stream_t** rings = lparams->rings;
     int64_t rings_count = lparams->rings_count;
@@ -317,9 +310,9 @@ void* listener_thread (void* params)
             case EIO_EFRAME_CPT: hdr->flags = BLAZE_FLAG_CRPT;   break;
             case EIO_EFRAME_HWO: hdr->flags = BLAZE_FLAG_HWOVFL; break;
             case EIO_EFRAME_TRC: hdr->flags = BLAZE_FLAG_TRNC;   break;
-            case EIO_EFRAME_TRC_ABT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
-            case EIO_EFRAME_TRC_CPT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
-            case EIO_EFRAME_TRC_HWO: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT ; break;
+            case EIO_EFRAME_TRC_ABT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_ABRT;   break;
+            case EIO_EFRAME_TRC_CPT: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_CRPT;   break;
+            case EIO_EFRAME_TRC_HWO: hdr->flags = BLAZE_FLAG_TRNC | BLAZE_FLAG_HWOVFL; break;
 
             default:
                 ch_log_fatal("Unexpected error type %i\n", err_aq);
@@ -357,7 +350,7 @@ void* listener_thread (void* params)
 
         //Clean up the accounting
         dropped = 0;
-        bytes_added += rx_bytes;
+        bytes_added += hdr->caplen;
 
         ifassert(bytes_added > obuff_len){
             ch_log_fatal("Wrote beyond end of buffer %li > %li\n", rx_bytes, obuff_len);

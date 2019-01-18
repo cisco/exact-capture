@@ -44,7 +44,6 @@ typedef struct
     eio_stream_t** rings;
     int64_t rings_count;
     int64_t snaplen;
-    listen_stats_t stats;
 
 } lparams_t;
 
