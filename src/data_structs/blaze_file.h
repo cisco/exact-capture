@@ -4,10 +4,6 @@
  *
  *  Created:     9 January 2019
  *  Author:      Matthew P. Grosvenor
- * See LICENSE.txt for full details.
- *
- *  Created:     9 January 2019
- *  Author:      Matthew P. Grosvenor
  *  Description:
  *  Definition of the "blaze" file format for writing packets out of Exact-
  *  Capture. Blaze format borrows loosely some concepts from pcap and ERF,

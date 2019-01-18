@@ -833,7 +833,7 @@ static void estats_lprint(exact_stats_t* stats,
     {
         ch_log_info("Listener:%02i %18s -- %.2fGbps %.2fMpps %lierrs %lidrp %liswofl %s %s\n",
                tid,
-               nic_hw->name,
+               nic_hw->device,
 
                nic_sw_rate_gbs,
                nic_sw_rate_mpps,
@@ -847,7 +847,7 @@ static void estats_lprint(exact_stats_t* stats,
     {
         ch_log_info("Listener:%02i %18s -- HW:%.2f SW:%.2fMpps [lost?:%li] %.2fGbps %lierrs %lidrp %liswofl %lihwofl %.3fM Spins1 %.3fM SpinsP RINGHW %s RINGSW %s\n",
                tid,
-               nic_hw->name,
+               nic_hw->device,
 
                nic_hw_rate_mpps,
                nic_sw_rate_mpps,
@@ -882,14 +882,14 @@ exact_stats_sample_t estats_sample_delta(exact_stats_t* stats,
 
     for(ch_word i = 0; i < lcount; i++)
     {
-        ifassert(strcmp(lhs->nic_hw[i].name,rhs->nic_hw[i].name))
+        ifassert(strcmp(lhs->nic_hw[i].device,rhs->nic_hw[i].device))
         {
             ch_log_warn("Finding delta between different files \"%s\" and \"%s\"\n",
-                        lhs->nic_hw[i].name,rhs->nic_hw[i].name);
+                        lhs->nic_hw[i].device,rhs->nic_hw[i].device);
         }
         res.lthread[i] = lthread_stats_sub(&lhs->lthread[i], &rhs->lthread[i]);
         res.nic_hw[i]  = nic_stats_hw_sub(&lhs->nic_hw[i], &rhs->nic_hw[i]);
-        res.nic_hw[i].name = lhs->nic_hw[i].name;
+        res.nic_hw[i].device = lhs->nic_hw[i].device;
     }
 
     for(ch_word i = 0; i < lcount * wcount; i++)

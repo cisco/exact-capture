@@ -25,8 +25,6 @@
 #include <sys/shm.h>
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 
-
-
 #include <chaste/chaste.h>
 #include <chaste/utils/util.h>
 
@@ -34,6 +32,63 @@
 
 #include "exactio_timing.h"
 
+//Uses integer division to round up
+#define round_up( value, nearest) ((( value + nearest -1) / nearest ) * nearest )
+#define getpagesize() sysconf(_SC_PAGESIZE)
+
+//See http://man7.org/linux/man-pages/man5/proc.5.html /proc/[pid]/stat
+typedef struct
+{
+   int pid; //The process ID.
+   char comm[255]; //The filename of the executable, in parentheses.
+   char state; //State R=Running S=Sleeping D=Disk sleep X=Dead
+   int ppid; //Parent PID
+   int pgrp;//Process Group ID
+   int session; //The session ID of process
+   int tty_nr; //The controlling terminal number
+   int tpgid;
+   unsigned int flags; //See the PF_* defines in include/linux/sched.h.
+   int64_t minflt; //minor faults - loading a memory page from disk.
+   int64_t cminflt; //minor faults - child processes
+   int64_t majflt; //major faults - pages loaded from disk
+   int64_t cmajflt; //major faults - child processes
+   int64_t utime; //user mode time in clock ticks
+   int64_t stime; //kernel mode time in clock ticks
+} proc_stats_t;
+
+typedef struct bring_hw_stats
+{
+   int64_t minflt; //minor faults - loading a memory page from disk.
+   int64_t majflt; //major faults - pages loaded from disk
+   int64_t utime; //user mode time in clock ticks
+   int64_t stime; //kernel mode time in clock ticks
+} __attribute__((packed)) __attribute__((aligned(8))) bring_stats_hw_t;
+
+static exac_stats_descr_t bring_stats_hw_desc[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "bring_minflt", "Minor page faults", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "bring_majflt", "Major page faults", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "utime",        "Userspace time",    EXACT_STAT_UNIT_TICKS, 1},
+    {EXACT_STAT_TYPE_INT64, "stime",        "Kernelspace time",  EXACT_STAT_UNIT_TICKS, 1},
+    {0,0,0,0},
+};
+
+typedef struct rdwr_bring_sw_stats
+{
+    int64_t aq_miss;  //Nothing in the ring
+    int64_t aq_hit;   //Something was in the ring
+    int64_t aq_bytes; //Bytes acquired
+    int64_t rl_bytes; //Bytes released
+} __attribute__((packed)) __attribute__((aligned(8))) bring_stats_sw_t;
+
+static exac_stats_descr_t bring_stats_sw_desc[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "aq_miss",  "Ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_hit",   "Ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_bytes", "Ring acquired bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {EXACT_STAT_TYPE_INT64, "rl_bytes", "Ring released bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {0,0,0,0},
+};
 
 
 typedef struct slot_header_s{
@@ -43,11 +98,6 @@ typedef struct slot_header_s{
     int64_t data_size;
     char padding_2[4096 - sizeof(int64_t) - 64];
 } bring_slot_header_t;
-
-
-//Uses integer division to round up
-#define round_up( value, nearest) ((( value + nearest -1) / nearest ) * nearest )
-#define getpagesize() sysconf(_SC_PAGESIZE)
 
 typedef struct bring_priv {
     int fd;
@@ -82,6 +132,10 @@ typedef struct bring_priv {
     FILE* rd_proc_stats_f;      //FD for the proc stats file
     int wr_pid;                 //Linux PID for the write thread, used for stats
     FILE* wr_proc_stats_f;      //FD for the proc stats file
+    bring_stats_hw_t stats_hw_rd; //Software based statistics for read side
+    bring_stats_hw_t stats_hw_wr; //Software based statistics for write side
+
+
     bring_stats_sw_t stats_sw_rd; //Software based statistics for read side
     bring_stats_sw_t stats_sw_wr; //Software based statistics for write side
 
@@ -221,15 +275,17 @@ static inline eio_error_t bring_read_release(eio_stream_t* this)
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void** stats,
+                                              exac_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
-    *bstats_sw = priv->stats_sw_rd;
+    *stats = &priv->stats_sw_rd;
+    *stats_descr = bring_stats_sw_desc;
 	return EIO_ENONE;
 }
 
-static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_stats_hw_t* stats)
+static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp,
+                                         bring_stats_hw_t* local_stats)
 {
     ch_log_debug1("Trying to read bring hw stats on pid = %i with fd=%p\n", *pid, *proc_stats_fp);
     ifunlikely(!*pid){
@@ -264,12 +320,23 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_s
     fseek(*proc_stats_fp,0,0);
 
     int err = 0;
+    proc_stats_t proc_stats = {0};
     err = fscanf(*proc_stats_fp,"%d %s %c %d %d %d %d %d %u %li %li %li %li %li %li",
-                 &stats->pid, stats->comm, &stats->state, &stats->ppid, &stats->pgrp,
-                 &stats->session, &stats->tty_nr, &stats->tpgid, &stats->flags,
-                 &stats->minflt, &stats->cmajflt, &stats->majflt, &stats->cmajflt,
-                 &stats->utime, &stats->stime);
-
+                 &proc_stats.pid,
+                 proc_stats.comm,
+                 &proc_stats.state,
+                 &proc_stats.ppid,
+                 &proc_stats.pgrp,
+                 &proc_stats.session,
+                 &proc_stats.tty_nr,
+                 &proc_stats.tpgid,
+                 &proc_stats.flags,
+                 &proc_stats.minflt,
+                 &proc_stats.cmajflt,
+                 &proc_stats.majflt,
+                 &proc_stats.cmajflt,
+                 &proc_stats.utime,
+                 &proc_stats.stime);
 
     if(err == EOF){
         ch_log_error("Error reading proc/stats\n");
@@ -279,15 +346,29 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_s
         return EIO_EEOF;
     }
 
+    local_stats->majflt = proc_stats.majflt;
+    local_stats->minflt = proc_stats.minflt;
+    local_stats->stime  = proc_stats.stime;
+    local_stats->utime  = proc_stats.utime;
+
     return EIO_ENONE;
 
 }
 
 
-static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_read_hw_stats(eio_stream_t* this,
+                                              void** stats,
+                                              exac_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    return bring_hw_stats(&priv->rd_pid, &priv->rd_proc_stats_f, stats);
+    eio_error_t err = bring_hw_stats(&priv->rd_pid,
+                          &priv->rd_proc_stats_f,
+                          &priv->stats_hw_rd);
+
+    *stats = &priv->stats_hw_rd;
+    *stats_descr = bring_stats_hw_desc;
+
+    return err;
 }
 
 
@@ -398,19 +479,28 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len)
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void** stats,
+                                               exac_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
-    *bstats_sw = priv->stats_sw_wr;
+    *stats = &priv->stats_sw_wr;
+    *stats_descr = bring_stats_sw_desc;
 
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_write_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_write_hw_stats(eio_stream_t* this,  void** stats,
+                                               exac_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    return bring_hw_stats(&priv->wr_pid, &priv->wr_proc_stats_f, stats);
+    eio_error_t err = bring_hw_stats(&priv->wr_pid,
+                          &priv->wr_proc_stats_f,
+                          &priv->stats_hw_wr);
+
+    *stats = &priv->stats_hw_wr;
+    *stats_descr = bring_stats_hw_desc;
+
+    return err;
 }
 
 
