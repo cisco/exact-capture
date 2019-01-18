@@ -40,7 +40,7 @@ typedef struct
     char hname[256]; //Human readable name
     exact_stats_units_t unit;
     int64_t radix;
-} exac_stats_descr_t;
+} exact_stats_descr_t;
 
 
 #endif /* SRC_DATA_STRUCTS_EXACT_STAT_DESCR_H_ */

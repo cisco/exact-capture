@@ -21,6 +21,8 @@ typedef struct  {
     char* name;
     int64_t id_major;
     int64_t id_minor;
+    bool use_huge_pages;
+    bool use_memory_locking;
 } bring_args_t;
 
 

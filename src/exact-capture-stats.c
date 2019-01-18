@@ -672,275 +672,280 @@
 //
 //}
 
+//
+//static void format_bring_stats(int more_verbose_lvl,
+//                               exact_stats_t* stats,
+//                               bring_stats_hw_t* bring_hw,
+//                               bring_stats_sw_t* bring_sw,
+//                               int64_t delta_ns,
+//                               char* bring_hw_str,
+//                               char* bring_sw_str,
+//                               int out_str_len)
+//{
+//
+//    int hw_str_off = 0;
+//    int sw_str_off = 0;
+//
+//    bring_stats_hw_t bring_hw_totals = {0};
+//    bring_stats_sw_t bring_sw_totals = {0};
+//
+//    if(more_verbose_lvl > 1)
+//    {
+//        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off, "[");
+//        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off, "[");
+//    }
+//    for(int w = 0; w < stats->wcount; w++)
+//    {
+//        const double bring_sw_aq_rate_gbps = ((double)bring_sw[w].aq_bytes * 8) / delta_ns;
+//        const double bring_sw_rl_rate_gbps = ((double)bring_sw[w].rl_bytes * 8) / delta_ns;
+//
+//        if(more_verbose_lvl > 1)
+//        {
+//            hw_str_off += snprintf(bring_hw_str + hw_str_off,out_str_len - hw_str_off,
+//                                   "%li/%liflts ",
+//                                   bring_hw[w].majflt,
+//                                   bring_hw[w].minflt );
+//            sw_str_off += snprintf(bring_sw_str + sw_str_off,out_str_len - sw_str_off,
+//                                   "%li/%.2fM Aq:%.2fGbps Rl:%.2fGbps,",
+//                                   bring_sw[w].aq_hit,
+//                                   bring_sw[w].aq_miss / 1000.0 / 1000.0,
+//                                   bring_sw_aq_rate_gbps,
+//                                   bring_sw_rl_rate_gbps );
+//        }
+//
+//        bring_hw_totals = bring_stats_hw_add(&bring_hw_totals,&bring_hw[w]);
+//        bring_sw_totals = bring_stats_sw_add(&bring_sw_totals,&bring_sw[w]);
+//
+//    }
+//
+//    if(more_verbose_lvl > 1)
+//    {
+//        hw_str_off--; //Remove trailing space.
+//        sw_str_off--; //Remove trailing comma
+//        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,"]");
+//        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,"]");
+//
+//
+//    }
+//
+//    if(more_verbose_lvl < 2)
+//    {
+//        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,
+//                               "(%li/%liflts)",
+//                               bring_hw_totals.majflt,
+//                               bring_hw_totals.minflt);
+//
+//        const double bring_sw_aq_total_rate_gbps = ((double)bring_sw_totals.aq_bytes * 8) / delta_ns;
+//        const double bring_sw_rl_total_rate_gbps = ((double)bring_sw_totals.rl_bytes * 8) / delta_ns;
+//
+//        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,
+//                               "(%lihits / %.2fMmiss Aq:%.2fGbps Rl:%.2fGbps)",
+//                               bring_sw_totals.aq_hit,
+//                               bring_sw_totals.aq_miss / 1000.0 / 1000.0,
+//                               bring_sw_aq_total_rate_gbps,
+//                               bring_sw_rl_total_rate_gbps );
+//    }
+//
+//}
+//
+//
+//
+//static void estats_wprint(exact_stats_t* stats,
+//                          bring_stats_hw_t* bring_hw,
+//                          bring_stats_sw_t* bring_sw,
+//                          file_stats_sw_rdwr_t* file_sw,
+//                          int64_t delta_ns,
+//                          int64_t tid)
+//{
+//    const char* name = file_sw->name;
+//
+//    const int64_t w_rate_ops = (file_sw->count / delta_ns) * 1000 * 1000 * 1000;
+//    const double w_rate_gbs  = ((double) file_sw->bytes  * 8.0) / delta_ns;
+//
+//    const int MAX_CHARS = 1024;
+//    char bring_hw_str[MAX_CHARS];
+//    char bring_sw_str[MAX_CHARS];
+//    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
+//
+//
+//    if(stats->more_verbose_lvl == 1 )
+//    {
+//        ch_log_info("Writer:%02i %-17s -- %.2fGbps %s %s\n",
+//                    tid,
+//                    name,
+//                    w_rate_gbs,
+//                    bring_hw_str,
+//                    bring_sw_str);
+//    }
+//
+//    else if(stats->more_verbose_lvl == 2)
+//    {
+//
+//        ch_log_info("Writer:%02i %-17s -- %.2fGbps %li Ops RINGHW %s RINGSW %s\n",
+//                    tid,
+//                    name,
+//                    w_rate_gbs,
+//                    w_rate_ops,
+//
+//                    bring_hw_str,
+//                    bring_sw_str
+//        );
+//
+//    }
+//
+//}
+//
+//
+//
+//
+//static void estats_lprint(exact_stats_t* stats,
+//                          listen_stats_t* listen_sw,
+//                          nic_stats_hw_t* nic_hw,
+//                          bring_stats_sw_t* bring_sw,
+//                          bring_stats_hw_t* bring_hw,
+//                          int64_t delta_ns,
+//                          int64_t tid)
+//
+//{
+//
+//
+//    const double nic_hw_rate_mpps = ((double) nic_hw->rx_count ) /
+//            (delta_ns / 1000.0);
+//
+//    const double nic_sw_rate_gbs  = ((double) listen_sw->bytes_rx * 8) /
+//            delta_ns;
+//    const double nic_sw_rate_mpps = ((double) listen_sw->packets_rx ) /
+//            (delta_ns / 1000.0);
+//
+//
+//    int64_t maybe_lost     = nic_hw->rx_count - listen_sw->packets_rx;
+//    /* Can't have lost -ve lost packets*/
+//    maybe_lost = maybe_lost < 0 ? 0 : maybe_lost;
+//
+//    const int MAX_CHARS = 1024;
+//    char bring_hw_str[MAX_CHARS];
+//    char bring_sw_str[MAX_CHARS];
+//    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
+//
+//    if(stats->more_verbose_lvl == 1 )
+//    {
+//        ch_log_info("Listener:%02i %18s -- %.2fGbps %.2fMpps %lierrs %lidrp %liswofl %s %s\n",
+//               tid,
+//               nic_hw->device,
+//
+//               nic_sw_rate_gbs,
+//               nic_sw_rate_mpps,
+//
+//               listen_sw->errors, listen_sw->dropped, listen_sw->swofl,
+//
+//               bring_hw_str,
+//               bring_sw_str);
+//    }
+//    else if(stats->more_verbose_lvl == 2)
+//    {
+//        ch_log_info("Listener:%02i %18s -- HW:%.2f SW:%.2fMpps [lost?:%li] %.2fGbps %lierrs %lidrp %liswofl %lihwofl %.3fM Spins1 %.3fM SpinsP RINGHW %s RINGSW %s\n",
+//               tid,
+//               nic_hw->device,
+//
+//               nic_hw_rate_mpps,
+//               nic_sw_rate_mpps,
+//               maybe_lost,
+//
+//               nic_sw_rate_gbs,
+//               listen_sw->errors,
+//               listen_sw->dropped,
+//               listen_sw->swofl,
+//               listen_sw->hwofl,
+//
+//               listen_sw->spins1_rx / 1000.0 / 1000.0,
+//               listen_sw->spinsP_rx / 1000.0 / 1000.0,
+//
+//               bring_hw_str,
+//               bring_sw_str
+//
+//        );
+//
+//    }
+//}
+//
+//
+//exact_stats_sample_t estats_sample_delta(exact_stats_t* stats,
+//                                         exact_stats_sample_t* lhs,
+//                                         exact_stats_sample_t* rhs)
+//{
+//    exact_stats_sample_t res = {0};
+//
+//    const ch_word lcount = stats->lcount;
+//    const ch_word wcount = stats->wcount;
+//
+//    for(ch_word i = 0; i < lcount; i++)
+//    {
+//        ifassert(strcmp(lhs->nic_hw[i].device,rhs->nic_hw[i].device))
+//        {
+//            ch_log_warn("Finding delta between different files \"%s\" and \"%s\"\n",
+//                        lhs->nic_hw[i].device,rhs->nic_hw[i].device);
+//        }
+//        res.lthread[i] = lthread_stats_sub(&lhs->lthread[i], &rhs->lthread[i]);
+//        res.nic_hw[i]  = nic_stats_hw_sub(&lhs->nic_hw[i], &rhs->nic_hw[i]);
+//        res.nic_hw[i].device = lhs->nic_hw[i].device;
+//    }
+//
+//    for(ch_word i = 0; i < lcount * wcount; i++)
+//    {
+//        res.bring_hw_rd[i] = bring_stats_hw_sub(&lhs->bring_hw_rd[i], &rhs->bring_hw_rd[i]);
+//        res.bring_sw_rd[i] = bring_stats_sw_sub(&lhs->bring_sw_rd[i], &rhs->bring_sw_rd[i]);
+//
+//        res.bring_hw_wr[i] = bring_stats_hw_sub(&lhs->bring_hw_wr[i], &rhs->bring_hw_wr[i]);
+//        res.bring_sw_wr[i] = bring_stats_sw_sub(&lhs->bring_sw_wr[i], &rhs->bring_sw_wr[i]);
+//    }
+//
+//    for(ch_word i = 0; i < wcount; i++)
+//    {
+//        ifassert(strcmp(lhs->file_sw_wr[i].name,rhs->file_sw_wr[i].name ))
+//        {
+//            ch_log_warn("Finding delta between different files \"%s\" and \"%s\"\n",
+//                        lhs->file_sw_wr[i].name, rhs->file_sw_wr[i].name );
+//        }
+//        res.file_sw_wr[i] = file_stats_sw_rdwr_sub(&lhs->file_sw_wr[i], &rhs->file_sw_wr[i]);
+//        strncpy(res.file_sw_wr[i].name,lhs->file_sw_wr[i].name,sizeof(res.file_sw_wr[i].name));
+//    }
+//
+//    res.time_ns = lhs->time_ns - rhs->time_ns;
+//
+//    return res;
+//}
+//
 
-static void format_bring_stats(int more_verbose_lvl,
-                               exact_stats_t* stats,
-                               bring_stats_hw_t* bring_hw,
-                               bring_stats_sw_t* bring_sw,
-                               int64_t delta_ns,
-                               char* bring_hw_str,
-                               char* bring_sw_str,
-                               int out_str_len)
+
+void estats_output(exact_stats_t* stats, exact_stats_sample_t* now)
 {
 
-    int hw_str_off = 0;
-    int sw_str_off = 0;
-
-    bring_stats_hw_t bring_hw_totals = {0};
-    bring_stats_sw_t bring_sw_totals = {0};
-
-    if(more_verbose_lvl > 1)
-    {
-        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off, "[");
-        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off, "[");
-    }
-    for(int w = 0; w < stats->wcount; w++)
-    {
-        const double bring_sw_aq_rate_gbps = ((double)bring_sw[w].aq_bytes * 8) / delta_ns;
-        const double bring_sw_rl_rate_gbps = ((double)bring_sw[w].rl_bytes * 8) / delta_ns;
-
-        if(more_verbose_lvl > 1)
-        {
-            hw_str_off += snprintf(bring_hw_str + hw_str_off,out_str_len - hw_str_off,
-                                   "%li/%liflts ",
-                                   bring_hw[w].majflt,
-                                   bring_hw[w].minflt );
-            sw_str_off += snprintf(bring_sw_str + sw_str_off,out_str_len - sw_str_off,
-                                   "%li/%.2fM Aq:%.2fGbps Rl:%.2fGbps,",
-                                   bring_sw[w].aq_hit,
-                                   bring_sw[w].aq_miss / 1000.0 / 1000.0,
-                                   bring_sw_aq_rate_gbps,
-                                   bring_sw_rl_rate_gbps );
-        }
-
-        bring_hw_totals = bring_stats_hw_add(&bring_hw_totals,&bring_hw[w]);
-        bring_sw_totals = bring_stats_sw_add(&bring_sw_totals,&bring_sw[w]);
-
-    }
-
-    if(more_verbose_lvl > 1)
-    {
-        hw_str_off--; //Remove trailing space.
-        sw_str_off--; //Remove trailing comma
-        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,"]");
-        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,"]");
-
-
-    }
-
-    if(more_verbose_lvl < 2)
-    {
-        hw_str_off += snprintf(bring_hw_str + hw_str_off, out_str_len - hw_str_off,
-                               "(%li/%liflts)",
-                               bring_hw_totals.majflt,
-                               bring_hw_totals.minflt);
-
-        const double bring_sw_aq_total_rate_gbps = ((double)bring_sw_totals.aq_bytes * 8) / delta_ns;
-        const double bring_sw_rl_total_rate_gbps = ((double)bring_sw_totals.rl_bytes * 8) / delta_ns;
-
-        sw_str_off += snprintf(bring_sw_str + sw_str_off, out_str_len - sw_str_off,
-                               "(%lihits / %.2fMmiss Aq:%.2fGbps Rl:%.2fGbps)",
-                               bring_sw_totals.aq_hit,
-                               bring_sw_totals.aq_miss / 1000.0 / 1000.0,
-                               bring_sw_aq_total_rate_gbps,
-                               bring_sw_rl_total_rate_gbps );
-    }
-
-}
-
-
-
-static void estats_wprint(exact_stats_t* stats,
-                          bring_stats_hw_t* bring_hw,
-                          bring_stats_sw_t* bring_sw,
-                          file_stats_sw_rdwr_t* file_sw,
-                          int64_t delta_ns,
-                          int64_t tid)
-{
-    const char* name = file_sw->name;
-
-    const int64_t w_rate_ops = (file_sw->count / delta_ns) * 1000 * 1000 * 1000;
-    const double w_rate_gbs  = ((double) file_sw->bytes  * 8.0) / delta_ns;
-
-    const int MAX_CHARS = 1024;
-    char bring_hw_str[MAX_CHARS];
-    char bring_sw_str[MAX_CHARS];
-    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
-
-
-    if(stats->more_verbose_lvl == 1 )
-    {
-        ch_log_info("Writer:%02i %-17s -- %.2fGbps %s %s\n",
-                    tid,
-                    name,
-                    w_rate_gbs,
-                    bring_hw_str,
-                    bring_sw_str);
-    }
-
-    else if(stats->more_verbose_lvl == 2)
-    {
-
-        ch_log_info("Writer:%02i %-17s -- %.2fGbps %li Ops RINGHW %s RINGSW %s\n",
-                    tid,
-                    name,
-                    w_rate_gbs,
-                    w_rate_ops,
-
-                    bring_hw_str,
-                    bring_sw_str
-        );
-
-    }
-
-}
-
-
-
-
-static void estats_lprint(exact_stats_t* stats,
-                          listen_stats_t* listen_sw,
-                          nic_stats_hw_t* nic_hw,
-                          bring_stats_sw_t* bring_sw,
-                          bring_stats_hw_t* bring_hw,
-                          int64_t delta_ns,
-                          int64_t tid)
-
-{
-
-
-    const double nic_hw_rate_mpps = ((double) nic_hw->rx_count ) /
-            (delta_ns / 1000.0);
-
-    const double nic_sw_rate_gbs  = ((double) listen_sw->bytes_rx * 8) /
-            delta_ns;
-    const double nic_sw_rate_mpps = ((double) listen_sw->packets_rx ) /
-            (delta_ns / 1000.0);
-
-
-    int64_t maybe_lost     = nic_hw->rx_count - listen_sw->packets_rx;
-    /* Can't have lost -ve lost packets*/
-    maybe_lost = maybe_lost < 0 ? 0 : maybe_lost;
-
-    const int MAX_CHARS = 1024;
-    char bring_hw_str[MAX_CHARS];
-    char bring_sw_str[MAX_CHARS];
-    format_bring_stats(stats->more_verbose_lvl, stats, bring_hw, bring_sw, delta_ns, bring_hw_str, bring_sw_str, MAX_CHARS);
-
-    if(stats->more_verbose_lvl == 1 )
-    {
-        ch_log_info("Listener:%02i %18s -- %.2fGbps %.2fMpps %lierrs %lidrp %liswofl %s %s\n",
-               tid,
-               nic_hw->device,
-
-               nic_sw_rate_gbs,
-               nic_sw_rate_mpps,
-
-               listen_sw->errors, listen_sw->dropped, listen_sw->swofl,
-
-               bring_hw_str,
-               bring_sw_str);
-    }
-    else if(stats->more_verbose_lvl == 2)
-    {
-        ch_log_info("Listener:%02i %18s -- HW:%.2f SW:%.2fMpps [lost?:%li] %.2fGbps %lierrs %lidrp %liswofl %lihwofl %.3fM Spins1 %.3fM SpinsP RINGHW %s RINGSW %s\n",
-               tid,
-               nic_hw->device,
-
-               nic_hw_rate_mpps,
-               nic_sw_rate_mpps,
-               maybe_lost,
-
-               nic_sw_rate_gbs,
-               listen_sw->errors,
-               listen_sw->dropped,
-               listen_sw->swofl,
-               listen_sw->hwofl,
-
-               listen_sw->spins1_rx / 1000.0 / 1000.0,
-               listen_sw->spinsP_rx / 1000.0 / 1000.0,
-
-               bring_hw_str,
-               bring_sw_str
-
-        );
-
-    }
-}
-
-
-exact_stats_sample_t estats_sample_delta(exact_stats_t* stats,
-                                         exact_stats_sample_t* lhs,
-                                         exact_stats_sample_t* rhs)
-{
-    exact_stats_sample_t res = {0};
-
-    const ch_word lcount = stats->lcount;
-    const ch_word wcount = stats->wcount;
-
-    for(ch_word i = 0; i < lcount; i++)
-    {
-        ifassert(strcmp(lhs->nic_hw[i].device,rhs->nic_hw[i].device))
-        {
-            ch_log_warn("Finding delta between different files \"%s\" and \"%s\"\n",
-                        lhs->nic_hw[i].device,rhs->nic_hw[i].device);
-        }
-        res.lthread[i] = lthread_stats_sub(&lhs->lthread[i], &rhs->lthread[i]);
-        res.nic_hw[i]  = nic_stats_hw_sub(&lhs->nic_hw[i], &rhs->nic_hw[i]);
-        res.nic_hw[i].device = lhs->nic_hw[i].device;
-    }
-
-    for(ch_word i = 0; i < lcount * wcount; i++)
-    {
-        res.bring_hw_rd[i] = bring_stats_hw_sub(&lhs->bring_hw_rd[i], &rhs->bring_hw_rd[i]);
-        res.bring_sw_rd[i] = bring_stats_sw_sub(&lhs->bring_sw_rd[i], &rhs->bring_sw_rd[i]);
-
-        res.bring_hw_wr[i] = bring_stats_hw_sub(&lhs->bring_hw_wr[i], &rhs->bring_hw_wr[i]);
-        res.bring_sw_wr[i] = bring_stats_sw_sub(&lhs->bring_sw_wr[i], &rhs->bring_sw_wr[i]);
-    }
-
-    for(ch_word i = 0; i < wcount; i++)
-    {
-        ifassert(strcmp(lhs->file_sw_wr[i].name,rhs->file_sw_wr[i].name ))
-        {
-            ch_log_warn("Finding delta between different files \"%s\" and \"%s\"\n",
-                        lhs->file_sw_wr[i].name, rhs->file_sw_wr[i].name );
-        }
-        res.file_sw_wr[i] = file_stats_sw_rdwr_sub(&lhs->file_sw_wr[i], &rhs->file_sw_wr[i]);
-        strncpy(res.file_sw_wr[i].name,lhs->file_sw_wr[i].name,sizeof(res.file_sw_wr[i].name));
-    }
-
-    res.time_ns = lhs->time_ns - rhs->time_ns;
-
-    return res;
-}
-
-
-
-void estats_output(exact_stats_t* stats, exact_stats_sample_t* now, exact_stats_sample_t* prev)
-{
-    exact_stats_sample_t delta = estats_sample_delta(stats, now, prev );
     for(int64_t l = 0; l < stats->lcount; l++)
     {
-        void* nic_sw      = delta.nic_sw[l];
-        void* nic_hw      = delta.nic_hw[l];
-        void* bring_hw_wr = delta.bring_hw_wr[l];
-        void* bring_sw_wr = delta.bring_sw_wr[l];
-        estats_lprint(stats, listen_sw, nic_hw, bring_sw_wr, bring_hw_wr, delta.time_ns, l);
+        //void* nic_sw      = now->nic_sw[l];
+        exact_stats_descr_t*  nic_sw_descr = now->nic_hw_descr[l];
+        for(;nic_sw_descr->type;nic_sw_descr++){
+            printf("name=%s\n", nic_sw_descr->hname);
+        }
+
+//        void* nic_hw      = delta.nic_hw[l];
+//        void* bring_hw_wr = delta.bring_hw_wr[l];
+//        void* bring_sw_wr = delta.bring_sw_wr[l];
+//        estats_lprint(stats, listen_sw, nic_hw, bring_sw_wr, bring_hw_wr, delta.time_ns, l);
     }
 
-    for(int64_t w = 0; w < stats->lcount; w++)
-    {
-        if(!stats->wparams_list[w].disk_ostream->name)
-        {
-            //This writer has been cleaned up
-            continue;
-        }
-        bring_stats_hw_t* bring_hw_rd = &delta.bring_hw_rd[w];
-        bring_stats_sw_t* bring_sw_rd = &delta.bring_sw_rd[w];
-        file_stats_sw_rdwr_t* file_sw_wr = &delta.file_sw_wr[w];
-        estats_wprint(stats,bring_hw_rd, bring_sw_rd, file_sw_wr, delta.time_ns, w);
-    }
+//    for(int64_t w = 0; w < stats->lcount; w++)
+//    {
+//        if(!stats->wparams_list[w].disk_ostream->name)
+//        {
+//            //This writer has been cleaned up
+//            continue;
+//        }
+//        bring_stats_hw_t* bring_hw_rd = &delta.bring_hw_rd[w];
+//        bring_stats_sw_t* bring_sw_rd = &delta.bring_sw_rd[w];
+//        file_stats_sw_rdwr_t* file_sw_wr = &delta.file_sw_wr[w];
+//        estats_wprint(stats,bring_hw_rd, bring_sw_rd, file_sw_wr, delta.time_ns, w);
+//    }
 
 
 }

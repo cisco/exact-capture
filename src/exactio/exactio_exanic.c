@@ -53,7 +53,7 @@ typedef struct nic_stats_hw
     int64_t rx_dropped_count;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_hw_t;
 
-static exac_stats_descr_t exanic_stats_hw_desc[7] =
+static exact_stats_descr_t exanic_stats_hw_desc[7] =
 {
     {EXACT_STAT_TYPE_STR,   "exanic_hw_device",            "ExaNIC HW device",           EXACT_STAT_UNIT_NAME,    0},
     {EXACT_STAT_TYPE_INT64, "exanic_hw_tx_count",          "ExaNIC HW tx count",         EXACT_STAT_UNIT_PACKETS, 1},
@@ -78,7 +78,7 @@ typedef struct nic_stats_sw_rx
     int64_t hwofl;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_sw_rx_t;
 
-static exac_stats_descr_t exanic_stats_sw_rx_desc[11] =
+static exact_stats_descr_t exanic_stats_sw_rx_desc[11] =
 {
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_spins_first",  "ExaNIC SW first chunk spin count",       EXACT_STAT_UNIT_COUNT,    1},
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_spins_more",   "ExaNIC SW remaining chunks spin count",  EXACT_STAT_UNIT_COUNT,    1},
@@ -100,7 +100,7 @@ typedef struct nic_stats_sw_tx
     int64_t bytes_tx;
 } __attribute__((packed)) __attribute__((aligned(8))) nic_stats_sw_tx_t;
 
-static exac_stats_descr_t exanic_stats_sw_tx_desc[3] =
+static exact_stats_descr_t exanic_stats_sw_tx_desc[3] =
 {
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_packets_rt",   "EXANIC SW tx frames", EXACT_STAT_UNIT_PACKETS, 1},
     {EXACT_STAT_TYPE_INT64, "exanic_sw_rx_bytes_tx",     "EXANIC SW tx bytes",  EXACT_STAT_UNIT_BYTES,   1},
@@ -592,7 +592,7 @@ static inline eio_error_t exa_read_release(eio_stream_t* this)
 
 
 static inline eio_error_t exa_read_sw_stats(eio_stream_t* this,void** stats,
-                                            exac_stats_descr_t** stats_descr)
+                                            exact_stats_descr_t** stats_descr)
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -609,7 +609,7 @@ static inline eio_error_t exa_read_sw_stats(eio_stream_t* this,void** stats,
 
 static inline eio_error_t exa_read_hw_stats(eio_stream_t* this,
                                             void** stats,
-                                            exac_stats_descr_t** stats_descr)
+                                            exact_stats_descr_t** stats_descr)
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->closed){
@@ -710,7 +710,7 @@ static eio_error_t exa_write_release(eio_stream_t* this, int64_t len)
 
 
 static inline eio_error_t exa_write_sw_stats(eio_stream_t* this,void** stats,
-                                             exac_stats_descr_t** stats_descr)
+                                             exact_stats_descr_t** stats_descr)
 {
 
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
@@ -726,7 +726,7 @@ static inline eio_error_t exa_write_sw_stats(eio_stream_t* this,void** stats,
 
 
 static inline eio_error_t exa_write_hw_stats(eio_stream_t* this, void** stats,
-        exac_stats_descr_t** stats_descr)
+        exact_stats_descr_t** stats_descr)
 
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);

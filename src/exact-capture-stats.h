@@ -30,17 +30,17 @@ typedef struct exact_capture_stats_sample {
     void* file_sw_wr[MAX_WTHREADS];
     void* file_hw_wr[MAX_WTHREADS];
 
-    exac_stats_descr_t* nic_sw_descr[MAX_LTHREADS];
-    exac_stats_descr_t* nic_hw_descr[MAX_LTHREADS];
+    exact_stats_descr_t* nic_sw_descr[MAX_LTHREADS];
+    exact_stats_descr_t* nic_hw_descr[MAX_LTHREADS];
 
-    exac_stats_descr_t* bring_hw_wr_descr[MAX_LWCONNS];
-    exac_stats_descr_t* bring_sw_wr_descr[MAX_LWCONNS];
+    exact_stats_descr_t* bring_hw_wr_descr[MAX_LWCONNS];
+    exact_stats_descr_t* bring_sw_wr_descr[MAX_LWCONNS];
 
-    exac_stats_descr_t* bring_hw_rd_descr[MAX_LWCONNS];
-    exac_stats_descr_t* bring_sw_rd_descr[MAX_LWCONNS];
+    exact_stats_descr_t* bring_hw_rd_descr[MAX_LWCONNS];
+    exact_stats_descr_t* bring_sw_rd_descr[MAX_LWCONNS];
 
-    exac_stats_descr_t* file_sw_wr_descr[MAX_WTHREADS];
-    exac_stats_descr_t* file_hw_wr_descr[MAX_WTHREADS];
+    exact_stats_descr_t* file_sw_wr_descr[MAX_WTHREADS];
+    exact_stats_descr_t* file_hw_wr_descr[MAX_WTHREADS];
 
 }  exact_stats_sample_t;
 
@@ -71,9 +71,8 @@ exact_stats_t* estats_init(bool verbose, ch_word more_verbose_lvl,
 
 void estats_take_sample(exact_stats_t* stats, exact_stats_sample_t* sample);
 
-void estats_output(exact_stats_t* stats,
-                   exact_stats_sample_t* now,
-                   exact_stats_sample_t* prev);
+void estats_output(exact_stats_t* stats, exact_stats_sample_t* now);
+
 
 void estats_output_summary(exact_stats_t* stats,
                           exact_stats_sample_t* now,

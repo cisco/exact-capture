@@ -79,7 +79,7 @@ USE_CH_OPTIONS;
 
 
 
-static struct
+static struct opts
 {
     CH_VECTOR(cstr)* ifaces;
     CH_VECTOR(cstr)* dests;
@@ -100,7 +100,8 @@ static struct
     bool no_overflow_warn;
     bool debug_log;
     bool no_spinner;
-
+    bool no_use_huge_pages;
+    bool no_memory_locking;
 } options;
 
 
@@ -335,7 +336,7 @@ static void remove_dups(CH_VECTOR(cstr)* opt_vec)
 
 
 
-eio_stream_t* alloc_nic(char* iface, bool use_dummy, int64_t snaplen  )
+eio_stream_t* alloc_nic(char* iface, bool use_dummy)
 {
 
     eio_stream_t* istream = NULL;
@@ -436,7 +437,8 @@ eio_stream_t* alloc_disk(char* filename, bool use_dummy, int64_t max_file_size)
 
 
 eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
-                         int64_t id_major, int64_t id_minor)
+                         int64_t id_major, int64_t id_minor,
+                         bool use_huge_pages, bool use_mem_locking)
 {
     eio_args_t args = {0};
     bzero(&args,sizeof(args));
@@ -473,11 +475,13 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
     {
         args.type = EIO_BRING;
         /* This must be a multiple of the disk block size (assume 4kB)*/
-        args.args.bring.slot_size  = BRING_SLOT_SIZE;
-        args.args.bring.slot_count = BRING_SLOT_COUNT;
-        args.args.bring.name       = calloc(1,namelen + 1);
-        args.args.bring.id_major   = id_major;
-        args.args.bring.id_minor   = id_minor;
+        args.args.bring.slot_size          = BRING_SLOT_SIZE;
+        args.args.bring.slot_count         = BRING_SLOT_COUNT;
+        args.args.bring.name               = calloc(1,namelen + 1);
+        args.args.bring.id_major           = id_major;
+        args.args.bring.id_minor           = id_minor;
+        args.args.bring.use_huge_pages     = use_huge_pages;
+        args.args.bring.use_memory_locking = use_mem_locking;
 
         snprintf(args.args.bring.name, 128, "%s:%s", iface, fname);
 
@@ -503,12 +507,14 @@ eio_stream_t* alloc_ring(bool use_dummy, char* iface, char* fname,
 
 
 void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostreams,
-                        eio_stream_t** ring_istreams, eio_stream_t** disk_ostreams,
-                        int64_t snaplen, int64_t max_file_size)
+                        eio_stream_t** ring_istreams, eio_stream_t** disk_ostreams)
 {
-    const int64_t nics  = options.ifaces->count;
-    const int64_t disks = options.dests->count;
-    const int64_t rings = nics * disks;
+    const int64_t nics        = options.ifaces->count;
+    const int64_t disks       = options.dests->count;
+    const int64_t rings       = nics * disks;
+    const int64_t max_file    = options.max_file;
+    const bool use_huge_pages = !options.no_use_huge_pages;
+    const bool use_mem_lock   = !options.no_memory_locking;
 
 
     if(nics > MAX_LTHREADS )
@@ -540,7 +546,7 @@ void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostrea
 
 
         //Allocate / connect each NIC to an istream
-        nic_istreams[nic_idx] = alloc_nic(*interface, dummy_nic, snaplen);
+        nic_istreams[nic_idx] = alloc_nic(*interface, dummy_nic);
 
         //Allocate rings to connect each listener thread a writer thread
         disk_idx = 0;
@@ -557,7 +563,14 @@ void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostrea
                         disk_idx,
                         ring_idx);
 
-            ring_ostreams[ring_idx] = alloc_ring(dummy_ring, *interface, *filename, nic_idx, disk_idx);
+            ring_ostreams[ring_idx] = alloc_ring(
+                    dummy_ring,
+                    *interface,
+                    *filename,
+                    nic_idx,
+                    disk_idx,
+                    use_huge_pages,
+                    use_mem_lock);
         }
 
     }
@@ -572,7 +585,7 @@ void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostrea
 
         ch_log_debug1("Allocating disk %s at disk index %i\n", *filename, disk_idx);
 
-        disk_ostreams[disk_idx] = alloc_disk( *filename, dummy_disk, max_file_size);
+        disk_ostreams[disk_idx] = alloc_disk( *filename, dummy_disk, max_file);
 
         //Allocate rings to connect each listener thread a writer thread
         nic_idx = 0;
@@ -668,7 +681,8 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL,  0, "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
     ch_opt_addbi (CH_OPTION_FLAG,      0, "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
     ch_opt_addbi (CH_OPTION_FLAG,      0, "no-color",          "Disable colored logging",                          &options.no_color, false);
-
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-use-huge-pages", "Disable using huge pages ",                        &options.no_use_huge_pages, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-memory-locking", "Disable memory locking",                           &options.no_memory_locking, false);
     ch_opt_parse (argc, argv);
 
     fprintf(stderr,"Exact-Capture %i.%i%s (%08X-%08X)\n",
@@ -786,7 +800,7 @@ int main (int argc, char** argv)
 
     exact_stats_sample_t stats_sample_start = {0};
     exact_stats_sample_t stats_sample_now   = {0};
-    exact_stats_sample_t stats_sample_prev  = {0};
+
 
     stats = estats_init(options.verbose,
                         options.more_verbose_lvl,
@@ -813,7 +827,7 @@ int main (int argc, char** argv)
     }
 
 
-    allocate_iostreams(nic_istreams, ring_ostreams, ring_istreams, disk_ostreams, options.snaplen, options.max_file);
+    allocate_iostreams(nic_istreams, ring_ostreams, ring_istreams, disk_ostreams);
     CH_VECTOR(pthread)* lthreads = start_listener_threads(cpus.listeners,lparams_list,nic_istreams,ring_ostreams,&listener_stop);
     CH_VECTOR(pthread)* wthreads = start_writer_threads(cpus.writers, wparams_list,ring_istreams,disk_ostreams,&writer_stop);
 
@@ -838,7 +852,6 @@ int main (int argc, char** argv)
     result = 0;
 
     estats_take_sample(stats, &stats_sample_start);
-    stats_sample_prev = stats_sample_start;
 
     int spinner_idx = 0;
     #define spinner_len 4
@@ -869,8 +882,7 @@ int main (int argc, char** argv)
         if(options.verbose || options.more_verbose_lvl)
         {
             estats_take_sample(stats, &stats_sample_now);
-            estats_output(stats, &stats_sample_now, &stats_sample_prev);
-            stats_sample_prev = stats_sample_now;
+            estats_output(stats, &stats_sample_now);
         }
     }
 

@@ -46,7 +46,7 @@ typedef struct dummy_stats_rd_sw_nic
     int64_t rx_packets;
 } __attribute__((packed)) __attribute__((aligned(8))) dummy_stats_rd_sw_nic_t;
 
-static exac_stats_descr_t dummy_stats_rd_sw_nic_desc[5] =
+static exact_stats_descr_t dummy_stats_rd_sw_nic_desc[5] =
 {
     {EXACT_STAT_TYPE_INT64, "aq_miss",    "Dummy NIC acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",     "Dummy NIC acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
@@ -63,7 +63,7 @@ typedef struct dummy_stats_rd_sw_ring
     int64_t rl_bytes;
 } __attribute__((packed)) __attribute__((aligned(8))) dummy_stats_sw_ring_t;
 
-static exac_stats_descr_t dummy_stats_sw_ring_desc[5] =
+static exact_stats_descr_t dummy_stats_sw_ring_desc[5] =
 {
     {EXACT_STAT_TYPE_INT64, "aq_miss",  "Dummy ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",   "Dummy ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
@@ -210,7 +210,7 @@ static eio_error_t dummy_read_release(eio_stream_t* this)
     return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void** stats, exac_stats_descr_t** stats_descr)
+static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void** stats, exact_stats_descr_t** stats_descr)
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     if(priv->rd_mode == DUMMY_MODE_EXANIC){
@@ -225,7 +225,7 @@ static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void** stats, 
     return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void** stats, exac_stats_descr_t** stats_descr)
+static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void** stats, exact_stats_descr_t** stats_descr)
 {
 
     (void)this;
@@ -294,7 +294,7 @@ static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len)
     return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void** stats, exac_stats_descr_t** stats_descr)
+static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void** stats, exact_stats_descr_t** stats_descr)
 {
     dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     *stats = &priv->stats_ring_wr;
@@ -302,7 +302,7 @@ static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void** stats,
 	return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void** stats, exac_stats_descr_t** stats_descr)
+static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void** stats, exact_stats_descr_t** stats_descr)
 {
     (void)this;
     (void)stats;

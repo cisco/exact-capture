@@ -64,7 +64,7 @@ typedef struct bring_hw_stats
    int64_t stime; //kernel mode time in clock ticks
 } __attribute__((packed)) __attribute__((aligned(8))) bring_stats_hw_t;
 
-static exac_stats_descr_t bring_stats_hw_desc[5] =
+static exact_stats_descr_t bring_stats_hw_desc[5] =
 {
     {EXACT_STAT_TYPE_INT64, "bring_minflt", "Minor page faults", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "bring_majflt", "Major page faults", EXACT_STAT_UNIT_COUNT, 1},
@@ -81,7 +81,7 @@ typedef struct rdwr_bring_sw_stats
     int64_t rl_bytes; //Bytes released
 } __attribute__((packed)) __attribute__((aligned(8))) bring_stats_sw_t;
 
-static exac_stats_descr_t bring_stats_sw_desc[5] =
+static exact_stats_descr_t bring_stats_sw_desc[5] =
 {
     {EXACT_STAT_TYPE_INT64, "aq_miss",  "Ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",   "Ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
@@ -105,6 +105,8 @@ typedef struct bring_priv {
     bool closed;
     int64_t slot_size;
     int64_t slot_count;
+    bool use_huge_pages;
+    bool use_mem_locking;
 
     bool expand;
 
@@ -147,8 +149,8 @@ typedef struct bring_priv {
 static void bring_destroy(eio_stream_t* this)
 {
 
-    //Basic sanity checks -- TODO XXX: Should these be made into (compile time optional?) asserts for runtime performance?
-    if( NULL == this){
+    //Basic sanity checks
+    ifassert( NULL == this){
         ch_log_error("This null???\n"); //WTF?
         return;
     }
@@ -276,7 +278,7 @@ static inline eio_error_t bring_read_release(eio_stream_t* this)
 }
 
 static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void** stats,
-                                              exac_stats_descr_t** stats_descr)
+                                              exact_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     *stats = &priv->stats_sw_rd;
@@ -358,7 +360,7 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp,
 
 static inline eio_error_t bring_read_hw_stats(eio_stream_t* this,
                                               void** stats,
-                                              exac_stats_descr_t** stats_descr)
+                                              exact_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     eio_error_t err = bring_hw_stats(&priv->rd_pid,
@@ -480,7 +482,7 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len)
 }
 
 static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void** stats,
-                                               exac_stats_descr_t** stats_descr)
+                                               exact_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     *stats = &priv->stats_sw_wr;
@@ -490,7 +492,7 @@ static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void** stats,
 }
 
 static inline eio_error_t bring_write_hw_stats(eio_stream_t* this,  void** stats,
-                                               exac_stats_descr_t** stats_descr)
+                                               exact_stats_descr_t** stats_descr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
     eio_error_t err = bring_hw_stats(&priv->wr_pid,
@@ -541,8 +543,11 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     // MAP_NORESERVE - if pages are locked, there's no need for swap memeory to back this mapping
     // MAP_POPULATE -  We want to all the page table entries to be populated so that we don't get page faults at runtime
     // MAP_HUGETLB - Use huge TBL entries to minimize page faults at runtime.
-    //
-    void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_LOCKED | MAP_HUGETLB | MAP_POPULATE, -1, 0);
+
+    int map_params = MAP_ANONYMOUS | MAP_PRIVATE;
+    map_params |= priv->use_huge_pages  ?  MAP_HUGETLB | MAP_POPULATE : 0;
+    map_params |= priv->use_mem_locking ? MAP_LOCKED : 0;
+    void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, map_params , -1, 0);
     //void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(mem == MAP_FAILED){
         ch_log_error("Could not create memory for bring \"%s\". Error=%s\n",  this->name, strerror(errno));
@@ -559,7 +564,7 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     }
 
     //Pin the pages so that they don't get swapped out
-    if(mlock(mem,ring_mem_len)){
+    if(priv->use_mem_locking && mlock(mem,ring_mem_len)){
         //ch_log_warn("Could not lock memory map. Error=%s\n",   strerror(errno));
         ch_log_fatal("Could not lock memory map. Error=%s\n",   strerror(errno));
         result = EIO_EINVALID;
@@ -626,6 +631,8 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     const uint64_t slot_size   = args->slot_size;
     const uint64_t slot_count  = args->slot_count;
     const uint64_t dontexpand  = args->dontexpand;
+    const bool use_huge_pages  = args->use_huge_pages;
+    const bool use_mem_locking = args->use_memory_locking;
     const int64_t id_major     = args->id_major;
     const int64_t id_minor     = args->id_minor;
     const char* name           = args->name;
@@ -636,13 +643,15 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
 
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
-    priv->slot_count = slot_count;
-    priv->slot_size  = slot_size;
-    priv->eof        = 0;
-    priv->expand     = !dontexpand;
-    priv->id_major   = id_major;
-    priv->id_minor   = id_minor;
-    priv->rd_sync_counter = 1; //This will be the first valid value
+    priv->slot_count        = slot_count;
+    priv->slot_size         = slot_size;
+    priv->use_huge_pages    = use_huge_pages;
+    priv->use_mem_locking   = use_mem_locking;
+    priv->eof               = 0;
+    priv->expand            = !dontexpand;
+    priv->id_major          = id_major;
+    priv->id_minor          = id_minor;
+    priv->rd_sync_counter   = 1; //This will be the first valid value
 
 
     int64_t err = EIO_ETRYAGAIN;
