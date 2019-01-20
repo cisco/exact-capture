@@ -40,6 +40,58 @@
 
 #define getpagesize() sysconf(_SC_PAGESIZE)
 
+typedef struct file_stats_sw_rd
+{
+    int64_t count;
+    int64_t bytes;
+    int64_t notif;
+    char* name;
+} __attribute__((packed)) __attribute__((aligned(8))) file_stats_sw_rd_t;
+
+static exact_stats_hdr_t file_stats_sw_rd_hdr[5] =
+{
+   {EXACT_STAT_TYPE_INT64, "file_rd_count", "File read count",          EXACT_STAT_UNIT_COUNT, 1},
+   {EXACT_STAT_TYPE_INT64, "file_rd_bytes", "File read bytes",          EXACT_STAT_UNIT_BYTES, 1},
+   {EXACT_STAT_TYPE_INT64, "file_rd_notif", "File read notifications",  EXACT_STAT_UNIT_COUNT, 1},
+   {EXACT_STAT_TYPE_STR,   "file_rd_name",  "File read name",           EXACT_STAT_UNIT_NAME,  1},
+   {0,0,0,0},
+};
+
+
+typedef struct file_stats_sw_wr
+{
+    int64_t count;
+    int64_t bytes;
+    int64_t rots;
+    char* name;
+} __attribute__((packed)) __attribute__((aligned(8))) file_stats_sw_wr_t;
+
+static exact_stats_hdr_t file_stats_sw_wr_hdr[5] =
+{
+   {EXACT_STAT_TYPE_INT64, "file_sw_wr_count", "File SW write count",     EXACT_STAT_UNIT_COUNT, 1},
+   {EXACT_STAT_TYPE_INT64, "file_sw_wr_bytes", "File SW write bytes",     EXACT_STAT_UNIT_BYTES, 1},
+   {EXACT_STAT_TYPE_INT64, "file_sw_wr_rots",  "File SW write rotations", EXACT_STAT_UNIT_COUNT, 1},
+   {EXACT_STAT_TYPE_STR,   "file_sw_wr_name",  "File SW write name",      EXACT_STAT_UNIT_NAME,  1},
+   {0,0,0,0},
+};
+
+typedef struct file_stats_hw_wr
+{
+    char* filesystem;
+    int64_t bytes_total;
+    int64_t bytes_used;
+    int64_t bytes_available;
+} __attribute__((packed)) __attribute__((aligned(8))) file_stats_hw_wr_t;
+
+static exact_stats_hdr_t file_stats_hw_wr_hdr[5] =
+{
+   {EXACT_STAT_TYPE_STR,   "file_hw_filesystem", "File HW filesystem",      EXACT_STAT_UNIT_NAME, 1},
+   {EXACT_STAT_TYPE_INT64, "file_hw_wr_count",   "File HW total space",     EXACT_STAT_UNIT_BYTES, 1},
+   {EXACT_STAT_TYPE_INT64, "file_hw_wr_bytes",   "File HW used space",      EXACT_STAT_UNIT_BYTES, 1},
+   {EXACT_STAT_TYPE_INT64, "file_hw_wr_rots",    "File HW available space", EXACT_STAT_UNIT_BYTES, 1},
+   {0,0,0,0},
+};
+
 typedef enum {
     EXACTIO_FILE_MOD_IGNORE = 0,
     EXACTIO_FILE_MOD_RESET  = 1,
@@ -76,8 +128,11 @@ typedef struct file_priv {
     int watch_descr;
     int watch_descr_delete;
 
-    file_stats_sw_rdwr_t stats_sw_rd;
-    file_stats_sw_rdwr_t stats_sw_wr;
+    file_stats_sw_rd_t stats_sw_rd;
+    file_stats_sw_wr_t stats_sw_wr;
+    file_stats_hw_wr_t stats_hw_wr;
+    char filesystem[256];
+
 
 } file_priv_t;
 
@@ -215,7 +270,6 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
         return EIO_ERELEASE;
     }
 
-
     ifunlikely(priv->notify_fd && priv->eof){
         struct inotify_event notif = {0};
         const ssize_t read_result = read(priv->notify_fd, &notif, sizeof(notif));
@@ -239,6 +293,7 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
         }
         else if(notif.mask == IN_MODIFY){
             //File has been modified, reset and go to start
+            priv->stats_sw_rd.notif++;
 
             struct stat st;
             if(fstat(priv->fd,&st) < 0){
@@ -246,7 +301,6 @@ static eio_error_t file_read_acquire(eio_stream_t* this, char** buffer, int64_t*
                 file_destroy(this);
                 return -8;
             }
-
 
             //We only care about changes which affect the file size
             if(st.st_size != priv->filesize)
@@ -338,19 +392,26 @@ static eio_error_t file_read_release(eio_stream_t* this)
 }
 
 
-static inline eio_error_t file_read_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t file_read_sw_stats(eio_stream_t* this,void** stats,
+                                             exact_stats_hdr_t** stats_hdr)
 {
-    (void)this;
-    (void)stats;
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    if(priv->closed){
+        return EIO_ECLOSED;
+    }
 
-	return EIO_ENOTIMPL;
+    *stats       = &priv->stats_sw_rd;
+    *stats_hdr = file_stats_sw_rd_hdr;
+
+    return EIO_ENONE;
 }
 
-static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t file_read_hw_stats(eio_stream_t* this, void** stats,
+                                             exact_stats_hdr_t** stats_hdr)
 {
     (void)this;
     (void)stats;
-
+    (void)stats_hdr;
 	return EIO_ENOTIMPL;
 }
 
@@ -438,6 +499,7 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len)
         ch_log_debug1("Flushing file and starting again write_max_file_size=%li, total_bytes_written=%li\n", priv->write_max_file_size, priv->total_bytes_written );
         //Rename the file with a number extension eg "myfile.17"
         priv->write_file_num++;
+        priv->stats_sw_wr.rots++;
         const int bufferlen = snprintf(NULL,0,"%s.%lu", this->name, priv->write_file_num);
         char* newfilename = calloc(1,bufferlen+1);
         sprintf(newfilename,"%s.%lu", this->name, priv->write_file_num);
@@ -484,48 +546,64 @@ static eio_error_t file_write_release(eio_stream_t* this, int64_t len)
 }
 
 
-static inline eio_error_t file_write_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t file_write_sw_stats(eio_stream_t* this,void** stats,
+        exact_stats_hdr_t** stats_hdr)
 {
-    ch_log_debug1("Trying to get stats on file %s\n", this->name);
-
     file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    if(priv->closed)
-    {
-        ch_log_warn("Getting stats for closed file\n");
+    if(priv->closed){
         return EIO_ECLOSED;
     }
 
-    file_stats_sw_rdwr_t* stats_sw_wr = (file_stats_sw_rdwr_t*)stats;
-    *stats_sw_wr = priv->stats_sw_wr;
+    priv->stats_sw_wr.name = this->name;
+    *stats       = &priv->stats_sw_wr;
+    *stats_hdr = file_stats_sw_wr_hdr;
 
-    const int statsstr_len = sizeof(stats_sw_wr->name);
-    const int filename_len = strlen(this->name);
-
-    ch_log_debug2("filenmae len=%i, bufferlen=%i\n", filename_len, statsstr_len );
-
-    bzero(stats_sw_wr->name, statsstr_len);
-
-    int offset = 0;
-    if(filename_len > statsstr_len -1)
-    {
-        stats_sw_wr->name[0] = '.';
-        stats_sw_wr->name[1] = '.';
-        stats_sw_wr->name[2] = '.';
-        offset = filename_len - statsstr_len + 1;
-
-    }
-
-    strncpy(&stats_sw_wr->name[3],this->name + offset, statsstr_len -1);
-
-	return EIO_ENOTIMPL;
+    return EIO_ENONE;
 }
 
-static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void* stats)
-{
-    (void)this;
-    (void)stats;
 
-	return EIO_ENOTIMPL;
+static inline eio_error_t file_write_hw_stats(eio_stream_t* this, void** stats,
+                                              exact_stats_hdr_t** stats_hdr)
+{
+    file_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    const char* fscmd_fmt = "df -B1 %s";
+    int cmd_len = snprintf(NULL, 0, fscmd_fmt, this->name );
+    char* fscmd   = calloc(cmd_len,1+1);
+    if(!fscmd){
+        return EIO_ENOMEM;
+    }
+    sprintf(fscmd,fscmd_fmt, this->name);
+
+
+    FILE* fp = popen(fscmd, "r");
+    if(!fp){
+        ch_log_error("Could not open command \"%s\"\n", fscmd);
+        return EIO_ECLOSED;
+    }
+
+    #define FS_RESULT_MAX 1024
+    char result[FS_RESULT_MAX] = {0};
+    //Assume the result we're looking for is on line 2 of the output
+    for(int i = 0; i < 2; i++){
+        fgets(result, FS_RESULT_MAX, fp);
+        ch_log_info("DF returned \"%s\"", result);
+    }
+
+    sscanf("%s %li %li %li",
+            priv->filesystem,
+            &priv->stats_hw_wr.bytes_available,
+            &priv->stats_hw_wr.bytes_used,
+            &priv->stats_hw_wr.bytes_total);
+    priv->stats_hw_wr.filesystem = priv->filesystem;
+    pclose(fp);
+
+    //Todo - run NVMe CTL here for temps etc
+
+    *stats       = &priv->stats_hw_wr;
+    *stats_hdr = file_stats_hw_wr_hdr;
+
+	return EIO_ENONE;
 }
 
 
@@ -540,8 +618,6 @@ static eio_error_t file_get_id(eio_stream_t* this, int64_t* id_major, int64_t* i
 
     return EIO_ENOTIMPL;
 }
-
-
 
 /*
  * Arguments
@@ -592,10 +668,8 @@ static eio_error_t file_construct(eio_stream_t* this, file_args_t* args)
         }
     }
 
-
     priv->read_on_mod = read_on_mod;
     return file_open(this, false);
-
 }
 
 

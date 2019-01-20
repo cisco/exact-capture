@@ -25,8 +25,6 @@
 #include <sys/shm.h>
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
 
-
-
 #include <chaste/chaste.h>
 #include <chaste/utils/util.h>
 
@@ -34,6 +32,63 @@
 
 #include "exactio_timing.h"
 
+//Uses integer division to round up
+#define round_up( value, nearest) ((( value + nearest -1) / nearest ) * nearest )
+#define getpagesize() sysconf(_SC_PAGESIZE)
+
+//See http://man7.org/linux/man-pages/man5/proc.5.html /proc/[pid]/stat
+typedef struct
+{
+   int pid; //The process ID.
+   char comm[255]; //The filename of the executable, in parentheses.
+   char state; //State R=Running S=Sleeping D=Disk sleep X=Dead
+   int ppid; //Parent PID
+   int pgrp;//Process Group ID
+   int session; //The session ID of process
+   int tty_nr; //The controlling terminal number
+   int tpgid;
+   unsigned int flags; //See the PF_* defines in include/linux/sched.h.
+   int64_t minflt; //minor faults - loading a memory page from disk.
+   int64_t cminflt; //minor faults - child processes
+   int64_t majflt; //major faults - pages loaded from disk
+   int64_t cmajflt; //major faults - child processes
+   int64_t utime; //user mode time in clock ticks
+   int64_t stime; //kernel mode time in clock ticks
+} proc_stats_t;
+
+typedef struct bring_hw_stats
+{
+   int64_t minflt; //minor faults - loading a memory page from disk.
+   int64_t majflt; //major faults - pages loaded from disk
+   int64_t utime; //user mode time in clock ticks
+   int64_t stime; //kernel mode time in clock ticks
+} __attribute__((packed)) __attribute__((aligned(8))) bring_stats_hw_t;
+
+static exact_stats_hdr_t bring_stats_hw_hdr[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "bring_minflt", "Minor page faults", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "bring_majflt", "Major page faults", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "utime",        "Userspace time",    EXACT_STAT_UNIT_TICKS, 1},
+    {EXACT_STAT_TYPE_INT64, "stime",        "Kernelspace time",  EXACT_STAT_UNIT_TICKS, 1},
+    {0,0,0,0},
+};
+
+typedef struct rdwr_bring_sw_stats
+{
+    int64_t aq_miss;  //Nothing in the ring
+    int64_t aq_hit;   //Something was in the ring
+    int64_t aq_bytes; //Bytes acquired
+    int64_t rl_bytes; //Bytes released
+} __attribute__((packed)) __attribute__((aligned(8))) bring_stats_sw_t;
+
+static exact_stats_hdr_t bring_stats_sw_hdr[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "aq_miss",  "Ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_hit",   "Ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_bytes", "Ring acquired bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {EXACT_STAT_TYPE_INT64, "rl_bytes", "Ring released bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {0,0,0,0},
+};
 
 
 typedef struct slot_header_s{
@@ -44,17 +99,14 @@ typedef struct slot_header_s{
     char padding_2[4096 - sizeof(int64_t) - 64];
 } bring_slot_header_t;
 
-
-//Uses integer division to round up
-#define round_up( value, nearest) ((( value + nearest -1) / nearest ) * nearest )
-#define getpagesize() sysconf(_SC_PAGESIZE)
-
 typedef struct bring_priv {
     int fd;
     bool eof;
     bool closed;
     int64_t slot_size;
     int64_t slot_count;
+    bool use_huge_pages;
+    bool use_mem_locking;
 
     bool expand;
 
@@ -82,6 +134,10 @@ typedef struct bring_priv {
     FILE* rd_proc_stats_f;      //FD for the proc stats file
     int wr_pid;                 //Linux PID for the write thread, used for stats
     FILE* wr_proc_stats_f;      //FD for the proc stats file
+    bring_stats_hw_t stats_hw_rd; //Software based statistics for read side
+    bring_stats_hw_t stats_hw_wr; //Software based statistics for write side
+
+
     bring_stats_sw_t stats_sw_rd; //Software based statistics for read side
     bring_stats_sw_t stats_sw_wr; //Software based statistics for write side
 
@@ -93,8 +149,8 @@ typedef struct bring_priv {
 static void bring_destroy(eio_stream_t* this)
 {
 
-    //Basic sanity checks -- TODO XXX: Should these be made into (compile time optional?) asserts for runtime performance?
-    if( NULL == this){
+    //Basic sanity checks
+    ifassert( NULL == this){
         ch_log_error("This null???\n"); //WTF?
         return;
     }
@@ -221,15 +277,19 @@ static inline eio_error_t bring_read_release(eio_stream_t* this)
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_read_sw_stats(eio_stream_t* this, void** stats,
+                                              exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
-    *bstats_sw = priv->stats_sw_rd;
+    *stats = &priv->stats_sw_rd;
+    *stats_hdr = bring_stats_sw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_sw_rd,  bring_stats_sw_hdr );
+
 	return EIO_ENONE;
 }
 
-static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_stats_hw_t* stats)
+static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp,
+                                         bring_stats_hw_t* local_stats)
 {
     ch_log_debug1("Trying to read bring hw stats on pid = %i with fd=%p\n", *pid, *proc_stats_fp);
     ifunlikely(!*pid){
@@ -264,12 +324,23 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_s
     fseek(*proc_stats_fp,0,0);
 
     int err = 0;
+    proc_stats_t proc_stats = {0};
     err = fscanf(*proc_stats_fp,"%d %s %c %d %d %d %d %d %u %li %li %li %li %li %li",
-                 &stats->pid, stats->comm, &stats->state, &stats->ppid, &stats->pgrp,
-                 &stats->session, &stats->tty_nr, &stats->tpgid, &stats->flags,
-                 &stats->minflt, &stats->cmajflt, &stats->majflt, &stats->cmajflt,
-                 &stats->utime, &stats->stime);
-
+                 &proc_stats.pid,
+                 proc_stats.comm,
+                 &proc_stats.state,
+                 &proc_stats.ppid,
+                 &proc_stats.pgrp,
+                 &proc_stats.session,
+                 &proc_stats.tty_nr,
+                 &proc_stats.tpgid,
+                 &proc_stats.flags,
+                 &proc_stats.minflt,
+                 &proc_stats.cmajflt,
+                 &proc_stats.majflt,
+                 &proc_stats.cmajflt,
+                 &proc_stats.utime,
+                 &proc_stats.stime);
 
     if(err == EOF){
         ch_log_error("Error reading proc/stats\n");
@@ -279,15 +350,29 @@ static inline eio_error_t bring_hw_stats(int* pid, FILE** proc_stats_fp, bring_s
         return EIO_EEOF;
     }
 
+    local_stats->majflt = proc_stats.majflt;
+    local_stats->minflt = proc_stats.minflt;
+    local_stats->stime  = proc_stats.stime;
+    local_stats->utime  = proc_stats.utime;
+
     return EIO_ENONE;
 
 }
 
 
-static inline eio_error_t bring_read_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_read_hw_stats(eio_stream_t* this,
+                                              void** stats,
+                                              exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    return bring_hw_stats(&priv->rd_pid, &priv->rd_proc_stats_f, stats);
+    eio_error_t err = bring_hw_stats(&priv->rd_pid,
+                          &priv->rd_proc_stats_f,
+                          &priv->stats_hw_rd);
+
+    *stats = &priv->stats_hw_rd;
+    *stats_hdr = bring_stats_hw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_hw_rd,  bring_stats_hw_hdr );
+    return err;
 }
 
 
@@ -398,19 +483,30 @@ static inline eio_error_t bring_write_release(eio_stream_t* this, int64_t len)
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_write_sw_stats(eio_stream_t* this, void** stats,
+                                               exact_stats_hdr_t** stats_hdr)
 {
-    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    bring_stats_sw_t* bstats_sw = (bring_stats_sw_t*)stats;
-    *bstats_sw = priv->stats_sw_wr;
 
+    bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    *stats = &priv->stats_sw_wr;
+    *stats_hdr = bring_stats_sw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_sw_wr,  bring_stats_sw_hdr );
     return EIO_ENONE;
 }
 
-static inline eio_error_t bring_write_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t bring_write_hw_stats(eio_stream_t* this,  void** stats,
+                                               exact_stats_hdr_t** stats_hdr)
 {
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    return bring_hw_stats(&priv->wr_pid, &priv->wr_proc_stats_f, stats);
+    eio_error_t err = bring_hw_stats(&priv->wr_pid,
+                          &priv->wr_proc_stats_f,
+                          &priv->stats_hw_wr);
+
+    *stats = &priv->stats_hw_wr;
+    *stats_hdr = bring_stats_hw_hdr;
+    ch_log_warn("returning %p %p\n", &priv->stats_hw_wr,  bring_stats_hw_hdr );
+    return err;
 }
 
 
@@ -451,8 +547,11 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     // MAP_NORESERVE - if pages are locked, there's no need for swap memeory to back this mapping
     // MAP_POPULATE -  We want to all the page table entries to be populated so that we don't get page faults at runtime
     // MAP_HUGETLB - Use huge TBL entries to minimize page faults at runtime.
-    //
-    void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_LOCKED | MAP_HUGETLB | MAP_POPULATE, -1, 0);
+
+    int map_params = MAP_ANONYMOUS | MAP_PRIVATE;
+    map_params |= priv->use_huge_pages  ?  MAP_HUGETLB | MAP_POPULATE : 0;
+    map_params |= priv->use_mem_locking ? MAP_LOCKED : 0;
+    void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, map_params , -1, 0);
     //void* mem = mmap( NULL, ring_mem_len, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(mem == MAP_FAILED){
         ch_log_error("Could not create memory for bring \"%s\". Error=%s\n",  this->name, strerror(errno));
@@ -469,7 +568,7 @@ static inline eio_error_t eio_bring_allocate(eio_stream_t* this)
     }
 
     //Pin the pages so that they don't get swapped out
-    if(mlock(mem,ring_mem_len)){
+    if(priv->use_mem_locking && mlock(mem,ring_mem_len)){
         //ch_log_warn("Could not lock memory map. Error=%s\n",   strerror(errno));
         ch_log_fatal("Could not lock memory map. Error=%s\n",   strerror(errno));
         result = EIO_EINVALID;
@@ -536,6 +635,8 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
     const uint64_t slot_size   = args->slot_size;
     const uint64_t slot_count  = args->slot_count;
     const uint64_t dontexpand  = args->dontexpand;
+    const bool use_huge_pages  = args->use_huge_pages;
+    const bool use_mem_locking = args->use_memory_locking;
     const int64_t id_major     = args->id_major;
     const int64_t id_minor     = args->id_minor;
     const char* name           = args->name;
@@ -546,13 +647,15 @@ static eio_error_t bring_construct(eio_stream_t* this, bring_args_t* args)
 
     bring_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
-    priv->slot_count = slot_count;
-    priv->slot_size  = slot_size;
-    priv->eof        = 0;
-    priv->expand     = !dontexpand;
-    priv->id_major   = id_major;
-    priv->id_minor   = id_minor;
-    priv->rd_sync_counter = 1; //This will be the first valid value
+    priv->slot_count        = slot_count;
+    priv->slot_size         = slot_size;
+    priv->use_huge_pages    = use_huge_pages;
+    priv->use_mem_locking   = use_mem_locking;
+    priv->eof               = 0;
+    priv->expand            = !dontexpand;
+    priv->id_major          = id_major;
+    priv->id_minor          = id_minor;
+    priv->rd_sync_counter   = 1; //This will be the first valid value
 
 
     int64_t err = EIO_ETRYAGAIN;

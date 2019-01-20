@@ -37,11 +37,47 @@
 #define getpagesize() sysconf(_SC_PAGESIZE)
 #define HEADER_SIZE getpagesize()
 
-typedef enum {
-    EXACTIO_FILE_MOD_IGNORE = 0,
-    EXACTIO_FILE_MOD_RESET  = 1,
-    EXACTIO_FILE_MOD_TAIL   = 2,
-} exactio_dummy_mod_t;
+
+typedef struct dummy_stats_rd_sw_nic
+{
+    int64_t aq_hit;
+    int64_t aq_miss;
+    int64_t rx_bytes;
+    int64_t rx_packets;
+} __attribute__((packed)) __attribute__((aligned(8))) dummy_stats_rd_sw_nic_t;
+
+static exact_stats_hdr_t dummy_stats_rd_sw_nic_hdr[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "aq_hit",     "Dummy NIC acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_miss",    "Dummy NIC acquire misses", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "rx_bytes",   "Dummy NIC rx bytes",       EXACT_STAT_UNIT_BYTES, 1},
+    {EXACT_STAT_TYPE_INT64, "rx_packets", "Dummy NIC rx packets",     EXACT_STAT_UNIT_PACKETS, 1},
+    {0,0,0,0},
+};
+
+static exact_stats_hdr_t dummy_stats_rd_hw_hdr[1] =
+{
+    {0,0,0,0},
+};
+
+typedef struct dummy_stats_rd_sw_ring
+{
+    int64_t aq_hit;
+    int64_t aq_miss;
+    int64_t aq_bytes;
+    int64_t rl_bytes;
+} __attribute__((packed)) __attribute__((aligned(8))) dummy_stats_sw_ring_t;
+
+static exact_stats_hdr_t dummy_stats_sw_ring_hdr[5] =
+{
+    {EXACT_STAT_TYPE_INT64, "aq_hit",   "Dummy ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_miss",  "Dummy ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_bytes", "Dummy ring acquired bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {EXACT_STAT_TYPE_INT64, "rl_bytes", "Dummy ring released bytes", EXACT_STAT_UNIT_BYTES, 1},
+    {0,0,0,0},
+};
+
+
 
 typedef struct exactio_dummy_priv_s {
     int fd;
@@ -63,12 +99,15 @@ typedef struct exactio_dummy_priv_s {
     int64_t segs;
 
     int64_t exanic_pkt_size;
-    int64_t exanic_bytes_read;
 
     int64_t rd_mode;
 
     int64_t id_major;
     int64_t id_minor;
+
+    dummy_stats_rd_sw_nic_t stats_nic_rd;
+    dummy_stats_sw_ring_t stats_ring_rd;
+    dummy_stats_sw_ring_t stats_ring_wr;
 
 } dummy_priv_t;
 
@@ -131,31 +170,22 @@ static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t
     }
 
     int result = EIO_ENONE;
+    priv->stats_nic_rd.aq_hit++;
+    priv->stats_ring_rd.aq_hit++;
 
     if(buffer == NULL || len == NULL){
         priv->reading = true;
         return EIO_ENONE;
     }
 
-
     if(priv->rd_mode == DUMMY_MODE_EXANIC){
-        const int64_t remain = priv->exanic_pkt_size - priv->exanic_bytes_read;
-//        ch_log_info("remain=%li, pkt_size=%li, bytes_read=%li\n",
-//                    remain,
-//                    priv->exanic_pkt_size,
-//                    priv->exanic_bytes_read);
-        if(remain > EXANIC_DATA_CHUNK_SIZE ){
-           priv->exanic_bytes_read += EXANIC_DATA_CHUNK_SIZE;
-           *len = EXANIC_DATA_CHUNK_SIZE;
-           result = EIO_EFRAG_MOR;
-        }
-        else{
-           priv->exanic_bytes_read = 0;
-           *len = remain;
-       }
+       *len = priv->exanic_pkt_size;
+       priv->stats_nic_rd.rx_packets += 1;
+       priv->stats_nic_rd.rx_bytes += *len;
     }
     else{
         *len    = priv->read_buff_size;
+        priv->stats_ring_rd.aq_bytes += *len;
     }
 
     //All good! Successful "read"!
@@ -185,20 +215,27 @@ static eio_error_t dummy_read_release(eio_stream_t* this)
     return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void** stats, exact_stats_hdr_t** stats_hdr)
 {
-    (void)this;
-    (void)stats;
+    dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    if(priv->rd_mode == DUMMY_MODE_EXANIC){
+        *stats = &priv->stats_nic_rd;
+        *stats_hdr = dummy_stats_rd_sw_nic_hdr;
+    }
+    else{
+        *stats = &priv->stats_ring_rd;
+        *stats_hdr = dummy_stats_sw_ring_hdr;
+    }
 
-	return EIO_ENOTIMPL;
+    return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t dummy_read_hw_stats(eio_stream_t* this, void** stats, exact_stats_hdr_t** stats_hdr)
 {
 
     (void)this;
     (void)stats;
-
+    *stats_hdr = dummy_stats_rd_hw_hdr;
 	return EIO_ENOTIMPL;
 }
 
@@ -215,11 +252,13 @@ static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_
         return EIO_ERELEASE;
     }
 
+    priv->stats_ring_wr.aq_hit++;
 
     iflikely(*buffer && *len){
          //User has supplied a buffer and a length, so just give it back to them
          priv->usr_write_buff = *buffer;
          priv->usr_write_buff_size = *len;
+         priv->stats_ring_wr.aq_bytes += *len;
 
      }
      else{
@@ -230,6 +269,7 @@ static eio_error_t dummy_write_acquire(eio_stream_t* this, char** buffer, int64_
 
          *len = priv->write_buff_size;
          *buffer = priv->write_buff;
+         priv->stats_ring_wr.aq_bytes += *len;
      }
 
      priv->writing = true;
@@ -254,23 +294,24 @@ static eio_error_t dummy_write_release(eio_stream_t* this, int64_t len)
     }
 
     priv->writing = false;
+    priv->stats_ring_wr.rl_bytes += len;
 
     return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t dummy_write_sw_stats(eio_stream_t* this, void** stats, exact_stats_hdr_t** stats_hdr)
 {
-    (void)this;
-    (void)stats;
-
-	return EIO_ENOTIMPL;
+    dummy_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+    *stats = &priv->stats_ring_wr;
+    *stats_hdr = dummy_stats_sw_ring_hdr;
+	return EIO_ENONE;
 }
 
-static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void* stats)
+static inline eio_error_t dummy_write_hw_stats(eio_stream_t* this, void** stats, exact_stats_hdr_t** stats_hdr)
 {
     (void)this;
     (void)stats;
-
+    (void)stats_hdr;
     return EIO_ENOTIMPL;
 }
 
@@ -306,7 +347,6 @@ static eio_error_t dummy_construct(eio_stream_t* this, dummy_args_t* dummy_args)
     const dummy_read_mode rd_mode   = dummy_args->rd_mode;
     const int64_t id_major          = dummy_args->id_major;
     const int64_t id_minor          = dummy_args->id_minor;
-
     const char* name                = dummy_args->name;
     const int64_t name_len = strnlen(name, 1024);
     this->name = calloc(name_len + 1, 1);

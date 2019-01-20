@@ -22,6 +22,7 @@
 #include <stdio.h>
 
 #include <chaste/utils/util.h>
+#include "../data_structs/exact_stat_hdr.h"
 #include "../data_structs/timespecps.h"
 
 //This compile out checks that aren't strictly necessary
@@ -38,7 +39,7 @@ typedef struct exactio_stream_s eio_stream_t;
 typedef enum {
     EIO_ENONE =  0,
     EIO_EUNSPEC,    //Unspecified error
-    EIO_ETRYAGAIN, //No data available, try again
+    EIO_ETRYAGAIN,  //No data available, try again
     EIO_ECLOSED,    //The underlying data source has closed
     EIO_EEOF,       //End of file has been reached
     EIO_ENOTIMPL,   //This function is not implemented
@@ -47,14 +48,17 @@ typedef enum {
     EIO_EACQUIRE,   //Acquire the buffer first before trying release again
     EIO_ENOMEM,     //No memory to back this
 
-    //These error codes only apply to fragment based transports.
-    EIO_EFRAG_MOR, //More fragments to come
-    EIO_EFRAG_EOF, //End of fragment sequence
-    EIO_EFRAG_ABT, //Fragment aborted by sender
-    EIO_EFRAG_CPT, //Fragment corrupt (e.g. csum failure)
+    //These error codes only apply to frame based transports.
+    EIO_EFRAME_ABT,      //Packet aborted by sender
+    EIO_EFRAME_CPT,      //Packet corrupt (e.g. csum failure)
+    EIO_EFRAME_TRC,      //Packet truncated (e.g. because rx buffer is too small)
+    EIO_EFRAME_DRP,      //Packet dropped (e.g because sw asked us too)
+    EIO_EFRAME_TRC_ABT,  //Packet both aborted and truncated (as above)
+    EIO_EFRAME_TRC_CPT,  //Packet both corrupt and truncated (as above)
+    EIO_EFRAME_TRC_HWO,  //Both HW overflow and truncated (as below)
+    EIO_EFRAME_HWO,      //Hardware overflow (e.g. insufficient PCIe bandwidth)
 
-    EIO_EHWOVFL,   //Hardware overflow (e.g. insufficient PCIe bandwidth)
-    EIO_ESWOVFL,   //Software overflow (e.g. software not keeping up)
+    EIO_ESWOVFL,         //Software overflow (e.g. software not keeping up)
 
     EIO_EINVALID,   //Something was done wrong
 
@@ -71,8 +75,8 @@ typedef struct exactio_stream_interface_s{
     //----------------
     eio_error_t (*read_acquire)(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts, int64_t* ts_hz);
     eio_error_t (*read_release)(eio_stream_t* this);
-    eio_error_t (*read_sw_stats)(eio_stream_t* this,void* stats);
-    eio_error_t (*read_hw_stats)(eio_stream_t* this,void* stats);
+    eio_error_t (*read_sw_stats)(eio_stream_t* this,void** stats,  exact_stats_hdr_t** stats_hdr);
+    eio_error_t (*read_hw_stats)(eio_stream_t* this,void** stats,  exact_stats_hdr_t** stats_hdr);
 
 
     //Write operations
@@ -81,8 +85,8 @@ typedef struct exactio_stream_interface_s{
     //for write_release len is zero, the frame the data is not committed
     eio_error_t (*write_acquire)(eio_stream_t* this, char** buffer, int64_t* len);
     eio_error_t (*write_release)(eio_stream_t* this, int64_t len);
-    eio_error_t (*write_sw_stats)(eio_stream_t* this,void* stats);
-    eio_error_t (*write_hw_stats)(eio_stream_t* this,void* stats);
+    eio_error_t (*write_sw_stats)(eio_stream_t* this,void** stats, exact_stats_hdr_t** stats_hdr);
+    eio_error_t (*write_hw_stats)(eio_stream_t* this,void** stats, exact_stats_hdr_t** stats_hdr);
 
     //Auxilary Operations
     //----------------

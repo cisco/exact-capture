@@ -40,20 +40,6 @@
 #define MAX_LTHREADS   (16)
 #define MAX_LWCONNS (MAX_LTHREADS * MAX_WTHREADS)
 
-typedef struct
-{
-    int64_t swofl;
-    int64_t hwofl;
-    int64_t dropped;
-    int64_t errors;
-    int64_t spins1_rx;
-    int64_t spinsP_rx;
-    int64_t bytes_rx;
-    int64_t packets_rx;
-
-} listen_stats_t  __attribute__( ( aligned ( 8 ) ) );
-
-
 
 
 

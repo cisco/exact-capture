@@ -26,15 +26,6 @@ typedef struct  {
 } file_args_t;
 
 
-typedef struct file_stats_sw_rdwr_t
-{
-    int64_t count;
-    int64_t bytes;
-    char name[20];
-} file_stats_sw_rdwr_t;
-
-
-
 NEW_IOSTREAM_DECLARE(file, file_args_t);
 
 #endif /* EXACTIO_FILE_H_ */
