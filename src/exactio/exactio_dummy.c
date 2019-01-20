@@ -48,8 +48,8 @@ typedef struct dummy_stats_rd_sw_nic
 
 static exact_stats_hdr_t dummy_stats_rd_sw_nic_hdr[5] =
 {
-    {EXACT_STAT_TYPE_INT64, "aq_miss",    "Dummy NIC acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",     "Dummy NIC acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_miss",    "Dummy NIC acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "rx_bytes",   "Dummy NIC rx bytes",       EXACT_STAT_UNIT_BYTES, 1},
     {EXACT_STAT_TYPE_INT64, "rx_packets", "Dummy NIC rx packets",     EXACT_STAT_UNIT_PACKETS, 1},
     {0,0,0,0},
@@ -70,8 +70,8 @@ typedef struct dummy_stats_rd_sw_ring
 
 static exact_stats_hdr_t dummy_stats_sw_ring_hdr[5] =
 {
-    {EXACT_STAT_TYPE_INT64, "aq_miss",  "Dummy ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_hit",   "Dummy ring acquire hits",   EXACT_STAT_UNIT_COUNT, 1},
+    {EXACT_STAT_TYPE_INT64, "aq_miss",  "Dummy ring acquire misses", EXACT_STAT_UNIT_COUNT, 1},
     {EXACT_STAT_TYPE_INT64, "aq_bytes", "Dummy ring acquired bytes", EXACT_STAT_UNIT_BYTES, 1},
     {EXACT_STAT_TYPE_INT64, "rl_bytes", "Dummy ring released bytes", EXACT_STAT_UNIT_BYTES, 1},
     {0,0,0,0},
@@ -181,6 +181,7 @@ static eio_error_t dummy_read_acquire(eio_stream_t* this, char** buffer, int64_t
     if(priv->rd_mode == DUMMY_MODE_EXANIC){
        *len = priv->exanic_pkt_size;
        priv->stats_nic_rd.rx_packets += 1;
+       priv->stats_nic_rd.rx_bytes += *len;
     }
     else{
         *len    = priv->read_buff_size;
@@ -225,10 +226,6 @@ static inline eio_error_t dummy_read_sw_stats(eio_stream_t* this, void** stats, 
         *stats = &priv->stats_ring_rd;
         *stats_hdr = dummy_stats_sw_ring_hdr;
     }
-
-    ch_log_warn("stats addr=%p\n",*stats_hdr );
-    ch_log_warn("stats hame addr=%p %s\n",&(*stats_hdr)->hname, &(*stats_hdr)->hname );
-
 
     return EIO_ENONE;
 }

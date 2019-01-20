@@ -916,6 +916,33 @@
 //}
 //
 
+void estats_to_json(exact_stats_hdr_t* hdr, void* values, char* pre, char* output, int* len )
+{
+    char* val = (char*)values;
+    int off = 0;
+    for(;hdr->type;hdr++){
+        switch(hdr->type){
+            case EXACT_STAT_TYPE_INT64:
+                off += snprintf(output+ off, *len - off, "\"%s_%s\":%li,",pre, hdr->vname, *((int64_t*)val));
+                val += sizeof(int64_t);
+                break;
+            case EXACT_STAT_TYPE_DOUBLE:
+                off += snprintf(output+ off, *len - off, "\"%s_%s\":%lf,",pre, hdr->vname, *((double*)val));
+                val += sizeof(double);
+                break;
+            case EXACT_STAT_TYPE_STR:
+                off += snprintf(output+ off, *len - off, "\"%s_%s\"=\"%s\",",pre, hdr->vname, *((char**)val));
+                val += sizeof(char*);
+                break;
+            default:
+                ch_log_error("Unknown stat type %i\n",hdr->type);
+        }
+
+    }
+    output[off -1] = '\0'; //Drop the trailing ','
+    *len = off -1;
+}
+
 
 void estats_output(exact_stats_t* stats, exact_stats_sample_t* now)
 {
@@ -924,12 +951,12 @@ void estats_output(exact_stats_t* stats, exact_stats_sample_t* now)
     {
         //void* nic_sw      = now->nic_sw[l];
         exact_stats_hdr_t*  nic_sw_hdr = now->nic_sw_hdr[l];
-        ch_log_warn("%li now human name 1=\"%s\"\n",l, now->nic_sw_hdr[l]->hname);
-        ch_log_warn("%li now human name 2=\"%s\"\n",l, nic_sw_hdr->hname);
+        char* nic_sw_vals              = (char*)now->nic_sw[l];
+        int len = 1024;
+        char output[1024] = {0};
+        estats_to_json(nic_sw_hdr, nic_sw_vals, "nic_sw" , output, &len);
+        printf("[%s]\n", output);
 
-        for(;nic_sw_hdr->type;nic_sw_hdr++){
-            ch_log_info("name=%s\n", nic_sw_hdr->hname);
-        }
 
 //        void* nic_hw      = delta.nic_hw[l];
 //        void* bring_hw_wr = delta.bring_hw_wr[l];
