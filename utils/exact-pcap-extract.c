@@ -442,7 +442,7 @@ begin_loop:
                 continue;
             }
 
-            if(pkt_hdr->caplen < 64){
+            if(pkt_hdr->caplen < 46){
                 ch_log_debug1("Skipping over runt frame %i (buffer %i) \n",
                               pkt_idx, buff_idx);
                 dropped_runts++;
@@ -579,7 +579,7 @@ begin_loop:
 
     }
 
-    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%lii (%li, %li, %li), Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_errors_abrt, dropped_errors_crpt, dropped_errors_swofl, dropped_padding);
+    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li (%li, %li, %li), Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_errors_abrt, dropped_errors_crpt, dropped_errors_swofl, dropped_padding);
     flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
     close(wr_buff.fd);
 
