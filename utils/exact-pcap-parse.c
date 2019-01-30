@@ -17,6 +17,11 @@
 #include <ctype.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 #include <chaste/types/types.h>
 #include <chaste/data_structs/vector/vector_std.h>
@@ -40,6 +45,7 @@ struct {
     bool verbose;
     char* format;
     ch_word offset;
+    ch_word timens;
     ch_word max;
     ch_word num;
 } options;
@@ -56,36 +62,16 @@ void signal_handler(int signum)
 }
 
 
-int read_expect(int fd, void* buff, ssize_t len, int64_t* offset)
-{
-
-    ssize_t total_bytes = 0;
-
-    do{
-        ch_log_debug1("Trying to read %liB\n", len);
-        ssize_t bytes = read(fd, (char*)buff + total_bytes, len - total_bytes);
-        if(bytes == 0){
-            ch_log_error("Reached end of file\n");
-            return 1;
-        }
-        total_bytes += bytes;
-
-    }
-    while(total_bytes < len);
-
-    *offset += total_bytes;
-
-    return 0;
-}
-
 
 
 void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
-                  bool nl, bool content, int total_out, int64_t timedelta_ns)
+                   int total_out, int64_t timedelta_ns)
 {
     char fmtd[4096] = {0};
+    char out[4096] = {0};
+    int off = 0;
 
-    if(content && options.num != 0){
+    if(options.num != 0){
         int n = 0;
 
         if(options.num < 0){
@@ -93,10 +79,10 @@ void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
         }
 
         for(int64_t i = 0; i < MIN((int64_t)pkt_hdr->caplen,options.num); i++){
-            n += snprintf(fmtd + n, 4096 -n, "%02x", *((uint8_t*)packet +i));
+            n += sprintf(fmtd + n, "%02x", *((uint8_t*)packet +i));
         }
     }
-    dprintf(fd, "%04i,%lins,%i.%09i,%i,%i,",
+    off += sprintf(out + off, "%04i,%lins,%i.%09i,%i,%i,",
             total_out, timedelta_ns,
             pkt_hdr->ts.ns.ts_sec, pkt_hdr->ts.ns.ts_nsec,
             pkt_hdr->caplen, pkt_hdr->len);
@@ -106,28 +92,25 @@ void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
         expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(packet)
                 + pkt_hdr->caplen - sizeof(expcap_pktftr_t));
 
-        dprintf(fd, "%i,%i,%li.%012li,",
+        off += sprintf(out + off, "%i,%i,%li.%012li,",
                 pkt_ftr->dev_id,
                 pkt_ftr->port_id,
                 (int64_t)pkt_ftr->ts_secs, (int64_t)pkt_ftr->ts_psecs);
     }
 
-    dprintf(fd, "%s",fmtd);
+    off += sprintf(out + off, "%s",fmtd);
 
-    if(nl){
-        dprintf(fd, "\n");
-    }
+    dprintf(fd, "%s\n", out);
+
 }
 
 
 
-int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr, char* pbuf )
+int read_packet(char* data, int64_t* offset, int64_t snaplen, pcap_pkthdr_t** pkt_hdro, char** pbufo )
 {
 
-    if(read_expect(fd, pkt_hdr, sizeof(pcap_pkthdr_t), offset)){
-        return 1;
-        //ch_log_fatal("Could not read enough bytes from %s at offset %li, (%li required)\n", options.input, offset, sizeof(pkt_hdr));
-    }
+    pcap_pkthdr_t* pkt_hdr = (pcap_pkthdr_t*)(data + *offset);
+    *offset += sizeof(pcap_pkthdr_t);
 
     bool error = false;
     snaplen = 4096;
@@ -136,22 +119,23 @@ int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr
         error = true;
     }
 
-    if(options.verbose && (pkt_hdr->len == 0 || pkt_hdr->len + sizeof(expcap_pktftr_t) < pkt_hdr->caplen)){
+    if(options.verbose && (pkt_hdr->len != 0 && pkt_hdr->len + sizeof(expcap_pktftr_t) < pkt_hdr->caplen)){
         ch_log_warn("Warning: packet len %li < capture len %li\n", pkt_hdr->len, pkt_hdr->caplen);
     }
 
 
     if(error){
-        read_expect(fd, pbuf, 4096, offset);
-        hexdump(&pkt_hdr, sizeof(pkt_hdr));
+        char* pbuf = data + *offset;
+        hexdump(pkt_hdr, sizeof(pkt_hdr));
         hexdump(pbuf, 4096);
         exit(0);
-
     }
 
-    if(read_expect(fd, pbuf, pkt_hdr->caplen, offset)){
-        return 1;
-    }
+    char* pbuf = data + *offset;
+    *offset += pkt_hdr->caplen;
+
+    *pbufo = pbuf;
+    *pkt_hdro = pkt_hdr;
 
     return 0;
 
@@ -175,10 +159,13 @@ int main(int argc, char** argv)
     ch_opt_addbi(CH_OPTION_FLAG,'v',"verbose","Printout verbose output", &options.verbose, false);
     ch_opt_addsu(CH_OPTION_REQUIRED,'f',"format","Input format [pcap | expcap]", &options.format);
     ch_opt_addii(CH_OPTION_OPTIONAL,'o',"offset","Offset into the file to start ", &options.offset, 0);
+    ch_opt_addii(CH_OPTION_OPTIONAL,'t',"time","Time into the file to start ", &options.timens, 0);
     ch_opt_addii(CH_OPTION_OPTIONAL,'m',"max","Max packets to output (<0 means all)", &options.max, -1);
     ch_opt_addii(CH_OPTION_OPTIONAL,'n',"num-chars","Number of characters to output (<=0 means all)", &options.num, 64);
 
     ch_opt_parse(argc,argv);
+
+    ch_log_settings.log_level = CH_LOG_LVL_INFO;
 
     if(!options.verbose && !options.csv){
         ch_log_fatal("Must choose an output type. Use either --verbose or --csv\n");
@@ -206,26 +193,37 @@ int main(int argc, char** argv)
         ch_log_fatal("Could not open PCAP %s (%s)\n", options.input, strerror(errno));
     }
 
-    pcap_file_header_t fhdr;
-    if(read_expect(fd, &fhdr, sizeof(fhdr), &offset)){
-        ch_log_fatal("Could not read enough bytes from %s at offset %li, (%li required)\n", options.input, offset, sizeof(pcap_file_header_t));
+    struct stat st = {0};
+    if(stat(options.input, &st))
+    {
+        ch_log_fatal("Could not stat file %s: \"%s\"\n", options.input, strerror(errno));
+    }
+    const ssize_t filesize = st.st_size;
+
+
+    char* data = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE , fd, 0);
+    if(data == MAP_FAILED)
+    {
+        ch_log_fatal("Could not map input file %s: \"%s\"\n", options.input, strerror(errno));
     }
 
-    char* magic_str = fhdr.magic == NSEC_TCPDUMP_MAGIC ? "Nansec TCP Dump" :  "UNKNOWN";
-    magic_str = fhdr.magic == TCPDUMP_MAGIC ? "TCP Dump" :  magic_str;
+    pcap_file_header_t* fhdr = (pcap_file_header_t*)(data + offset);
+    offset += sizeof(pcap_file_header_t);
+    char* magic_str = fhdr->magic == NSEC_TCPDUMP_MAGIC ? "Nansec TCP Dump" :  "UNKNOWN";
+    magic_str = fhdr->magic == TCPDUMP_MAGIC ? "TCP Dump" :  magic_str;
     if(options.verbose){
-        printf("Magic    0x%08x (%i) (%s)\n", fhdr.magic, fhdr.magic, magic_str);
-        printf("Ver Maj  0x%04x     (%i)\n", fhdr.version_major, fhdr.version_major);
-        printf("Ver Min  0x%04x     (%i)\n", fhdr.version_minor, fhdr.version_minor);
-        printf("Thiszone 0x%08x (%i)\n", fhdr.thiszone, fhdr.thiszone);
-        printf("SigFigs  0x%08x (%i)\n", fhdr.sigfigs, fhdr.sigfigs);
-        printf("Snap Len 0x%08x (%i)\n", fhdr.snaplen, fhdr.snaplen);
-        printf("Link typ 0x%08x (%i)\n", fhdr.linktype, fhdr.linktype);
+        printf("Magic    0x%08x (%i) (%s)\n", fhdr->magic, fhdr->magic, magic_str);
+        printf("Ver Maj  0x%04x     (%i)\n", fhdr->version_major, fhdr->version_major);
+        printf("Ver Min  0x%04x     (%i)\n", fhdr->version_minor, fhdr->version_minor);
+        printf("Thiszone 0x%08x (%i)\n", fhdr->thiszone, fhdr->thiszone);
+        printf("SigFigs  0x%08x (%i)\n", fhdr->sigfigs, fhdr->sigfigs);
+        printf("Snap Len 0x%08x (%i)\n", fhdr->snaplen, fhdr->snaplen);
+        printf("Link typ 0x%08x (%i)\n", fhdr->linktype, fhdr->linktype);
     }
 
-    pcap_pkthdr_t pkt_hdr;
-    char pbuf[1024 * 64] = {0};
-    if(read_packet(fd, &offset, fhdr.snaplen, &pkt_hdr, pbuf)){
+    pcap_pkthdr_t* pkt_hdr = NULL;
+    char* pbuf = NULL;
+    if(read_packet(data, &offset, fhdr->snaplen, &pkt_hdr, &pbuf)){
         exit(0);
     }
 
@@ -235,27 +233,22 @@ int main(int argc, char** argv)
         if(csv_fd < 0){
             ch_log_fatal("Could not open in missed file %s (%s)\n", options.csv, strerror(errno));
         }
-        if(expcap){
-            dprintf(csv_fd,"cap port,seconds.picos,");
-        }
-        dprintf(csv_fd,"seconds.nanos,length,payload\n");
-
     }
 
     int64_t timenowns = 0;
     int64_t timeprevns = 0;
     int64_t total_out = 0;
-    for(int pkt_num = 0; !stop && pkt_num < options.offset + options.max; pkt_num++,
+    for(int pkt_num = 0; (!stop) && (pkt_num < options.offset + options.max) && offset < filesize; pkt_num++,
     timeprevns = timenowns ){
         if(pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Loaded %li,000,000 packets\n", pkt_num/1000/1000);
         }
 
 
-        if(read_packet(fd, &offset, fhdr.snaplen, &pkt_hdr, pbuf)){
+        if(read_packet(data, &offset, fhdr->snaplen, &pkt_hdr, &pbuf)){
             break;
         }
-        timenowns = pkt_hdr.ts.ns.ts_sec * 1000ULL * 1000 * 1000 + pkt_hdr.ts.ns.ts_nsec;
+        timenowns = pkt_hdr->ts.ns.ts_sec * 1000ULL * 1000 * 1000 + pkt_hdr->ts.ns.ts_nsec;
 
         if(timeprevns == 0){
             timeprevns = timenowns;
@@ -264,26 +257,22 @@ int main(int argc, char** argv)
         const int64_t time_delta = timenowns - timeprevns;
 
 
-        if(pkt_num < options.offset){
+        if(pkt_num < options.offset || timenowns < options.timens){
             continue;
         }
 
-
         if(options.verbose){
-            dprint_packet(STDOUT_FILENO, expcap, &pkt_hdr, pbuf, true, true, total_out, time_delta );
+            dprint_packet(STDOUT_FILENO, expcap, pkt_hdr, pbuf, total_out, time_delta );
         }
 
         if(csv_fd > 0){
-            dprint_packet(csv_fd, expcap, &pkt_hdr, pbuf, true, true, total_out, time_delta);
+            dprint_packet(csv_fd, expcap, pkt_hdr, pbuf, total_out, time_delta);
         }
 
-
         total_out++;
-
-
     }
 
-
+    munmap(data, filesize);
     close(fd);
     if(csv_fd) close(csv_fd);
 
