@@ -426,7 +426,6 @@ void* listener_thread (void* params)
     inargs.args.exa.interface_tx    = NULL;
     inargs.args.exa.kernel_bypass   = lparams->kernel_bypass;
     inargs.args.exa.promisc         = lparams->promisc;
-    inargs.args.exa.clear_buff      = lparams->clear_buff;
     int err = eio_new (&inargs, &istream);
     if (err)
     {

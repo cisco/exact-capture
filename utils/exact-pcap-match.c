@@ -69,7 +69,7 @@ void signal_handler (int signum)
     stop = 1;
 }
 
-int read_expect (FILE* fd, void* buff, ssize_t len, int64_t* offset, bool debug)
+int read_expect (int fd, void* buff, ssize_t len, int64_t* offset, bool debug)
 {
     ssize_t total_bytes = 0;
 
@@ -79,14 +79,8 @@ int read_expect (FILE* fd, void* buff, ssize_t len, int64_t* offset, bool debug)
         {
             ch_log_debug1("Trying to read %liB on fd=%li\n", len, fd);
         };
-        ssize_t bytes = fread ((char*)buff + total_bytes,
-                              1, len - total_bytes, fd);
-        if (debug)
-        {
-            ch_log_debug1("Actually read %liB on fd=%li\n", bytes, fd);
-        };
-
-
+        ssize_t bytes = read (fd, (char*) buff + total_bytes,
+                              len - total_bytes);
         if (bytes == 0)
         {
             ch_log_error("Reached end of file\n");
@@ -203,15 +197,15 @@ int main (int argc, char** argv)
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
 
-    FILE* fd_ref = fopen (options.ref, "r");
-    if (!fd_ref)
+    int fd_ref = open (options.ref, O_RDONLY);
+    if (fd_ref < 0)
     {
         ch_log_fatal("Could not open reference PCAP %s (%s)\n", options.ref,
                      strerror(errno));
     }
 
-    FILE* fd_inp = fopen (options.input, "r");
-    if (!fd_inp)
+    int fd_inp = open (options.input, O_RDONLY);
+    if (fd_inp < 0)
     {
         ch_log_fatal("Could not open input PCAP %s (%s)\n", options.input,
                      strerror(errno));
@@ -298,7 +292,7 @@ int main (int argc, char** argv)
         printf ("Link typ 0x%08x (%i)\n", fhdr_ref.linktype, fhdr_ref.linktype);
     }
 
-    ch_hash_map* hmap = ch_hash_map_new (128 * 1024, sizeof(value_t),
+    ch_hash_map* hmap = ch_hash_map_new (128 * 1024 * 1024, sizeof(value_t),
                                          NULL);
 
     ch_log_info("Loading reference file %s...\n", options.ref);
@@ -380,7 +374,6 @@ int main (int argc, char** argv)
     }
     ch_log_info("Loaded %li entries from reference file %s...\n", pkt_num,
                 options.input);
-    fclose (fd_ref);
 
     ch_log_info("Loading input file %s...\n", options.input);
 
@@ -572,7 +565,7 @@ int main (int argc, char** argv)
     ch_log_info("%-12li packets from input file never found in reference file\n", total_lost);
     ch_log_info("%-12li packets in reference were never matched with input\n\n", missing_input);
 
-    fclose (fd_inp);
+    close (fd_ref);
     close (fd_out);
     if (fd_inp_miss > 0) close (fd_inp_miss);
     if (fd_ref_miss > 0) close (fd_ref_miss);

@@ -30,7 +30,6 @@ typedef struct  {
     char* interface_tx;
     bool promisc;
     bool kernel_bypass;
-    bool clear_buff;
 } exa_args_t;
 
 NEW_IOSTREAM_DECLARE(exa,exa_args_t);

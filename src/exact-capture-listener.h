@@ -53,7 +53,6 @@ typedef struct
 
     bool kernel_bypass;
     bool promisc;
-    bool clear_buff;
 
 } listener_params_t;
 

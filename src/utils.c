@@ -107,13 +107,13 @@ int parse_device (const char* interface,
 {
     if(!exanic_find_port_by_interface_name (interface, device, 16, port_number))
     {
-        parse_device_id(interface, dev_number);
+        parse_device_id(device, dev_number);
         return 0;
     }
 
     if(!parse_device_port (interface, device, port_number))
     {
-        parse_device_id(interface, dev_number);
+        parse_device_id(device, dev_number);
         return 0;
 
     }
@@ -183,63 +183,5 @@ int max_digitsf (double a, double b, double c, double d, double e, double f,
     result = MAX (result, get_digitsf (i));
     result = MAX (result, get_digitsf (j));
     return result;
-}
-
-
-timespecps_t sub_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs)
-{
-    timespecps_t result = {0};
-    int64_t borrow_secs  = 0;
-    result.tv_psec = lhs->tv_psec - rhs->tv_psec;
-
-    if(lhs->tv_psec < rhs->tv_psec){
-        borrow_secs++;
-        result.tv_psec += PS_IN_SECS;
-    }
-
-    result.tv_sec  = lhs->tv_sec  - rhs->tv_sec  - borrow_secs;
-
-    return result;
-
-}
-
-
-timespecps_t add_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs)
-{
-    timespecps_t result = {0};
-    int64_t carry_secs  = 0;
-    result.tv_psec = lhs->tv_psec + rhs->tv_psec;
-
-    if(result.tv_psec > PS_IN_SECS){
-        carry_secs++;
-        result.tv_psec -= PS_IN_SECS;
-    }
-
-    result.tv_sec  = lhs->tv_sec  + rhs->tv_sec  + carry_secs;
-
-    return result;
-
-}
-
-
-timespecps_t sub_tsps_ps(timespecps_t* lhs, int64_t ps)
-{
-    timespecps_t rhs = {.tv_sec = 0, .tv_psec = ps};
-    return sub_tsps_tsps(lhs, &rhs);
-}
-
-
-timespecps_t add_tsps_ps(timespecps_t* lhs, int64_t ps)
-{
-    timespecps_t rhs = {.tv_sec = 0, .tv_psec = ps};
-    return add_tsps_tsps(lhs, &rhs);
-}
-
-
-
-
-double tsps_to_double_ns(timespecps_t* lhs)
-{
-    return (double)lhs->tv_psec/1000 + (double)lhs->tv_sec*PS_IN_SECS/1000;
 }
 

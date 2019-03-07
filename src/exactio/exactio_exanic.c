@@ -298,7 +298,6 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     const char* interface_tx = args->interface_tx;
     const bool promisc       = args->promisc;
     const bool kernel_bypass = args->kernel_bypass;
-    const bool clear_buff    = args->clear_buff;
 
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
 
@@ -320,24 +319,6 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
         if (!priv->rx){
             fprintf(stderr, "exanic_acquire_rx_buffer: %s\n", exanic_get_last_error());
             return 1;
-        }
-
-        if(clear_buff){
-            fprintf(stderr, "Warning: clearing rx buffer on %s\n", interface_rx);
-            const size_t rx_buff_sz = 64 * 1024;
-            char rx_buff[rx_buff_sz];
-            int64_t clear_cnt = -1;
-            for(ssize_t err = -1; err != 0; clear_cnt++){
-                 err =exanic_receive_frame(priv->rx, rx_buff, rx_buff_sz, NULL);
-                 if(err < 0){
-                    fprintf(stderr,"Warning: rx error %li on %s\n", err, interface_rx);
-                 }
-            }
-            if(clear_cnt > 0){
-                fprintf(stderr, "Cleared stale packets from rx buffer on %s\n",
-                            interface_rx);
-            }
-            fprintf(stderr,"Done clearing rx buffer on %s\n", interface_rx);
         }
 
         if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
