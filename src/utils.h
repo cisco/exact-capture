@@ -47,10 +47,10 @@ int max_digitsll (int64_t a, int64_t b, int64_t c, int64_t d, int64_t e,
 
 
 #define PS_IN_SECS (1000LL*1000*1000*1000)
-timespecps_t sub_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs);
-timespecps_t add_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs);
-timespecps_t sub_tsps_ps(timespecps_t* lhs, int64_t ps);
-timespecps_t add_tsps_ps(timespecps_t* lhs, int64_t ps);
-double tsps_to_double_ns(timespecps_t* lhs);
+timespecps_t sub_tsps_tsps(const timespecps_t* lhs, const timespecps_t* rhs);
+timespecps_t add_tsps_tsps(const timespecps_t* lhs, const timespecps_t* rhs);
+timespecps_t sub_tsps_ps(const timespecps_t* lhs, const int64_t ps);
+timespecps_t add_tsps_ps(const timespecps_t* lhs, const int64_t ps);
+double tsps_to_double_ns(const timespecps_t* lhs);
 
 #endif /* SRC_UTILS_H_ */
