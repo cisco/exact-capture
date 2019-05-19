@@ -8,7 +8,7 @@
  *  Definition of utilities for operating with time (quickly)
  */
 
-#ifndef SRC_EXACTIO_EXACTIO_TIMING_H_OLD_
+#ifndef SRC_EXACTIO_EXACTIO_TIMING_H_
 #define SRC_EXACTIO_EXACTIO_TIMING_H_
 
 #include "../data_structs/timespecps.h"

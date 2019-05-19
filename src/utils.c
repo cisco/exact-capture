@@ -186,25 +186,18 @@ int max_digitsf (double a, double b, double c, double d, double e, double f,
 }
 
 
-timespecps_t sub_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs)
+timespecps_t sub_tsps_tsps(const timespecps_t* lhs, const timespecps_t* rhs)
 {
     timespecps_t result = {0};
-    int64_t borrow_secs  = 0;
     result.psecs = lhs->psecs - rhs->psecs;
-
-    if(lhs->psecs < rhs->psecs){
-        borrow_secs++;
-        result.psecs += PS_IN_SECS;
-    }
-
-    result.secs  = lhs->secs  - rhs->secs  - borrow_secs;
+    result.secs  = lhs->secs  - rhs->secs;
 
     return result;
 
 }
 
 
-timespecps_t add_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs)
+timespecps_t add_tsps_tsps(const timespecps_t* lhs, const timespecps_t* rhs)
 {
     timespecps_t result = {0};
     int64_t carry_secs  = 0;
@@ -222,24 +215,22 @@ timespecps_t add_tsps_tsps(timespecps_t* lhs, timespecps_t* rhs)
 }
 
 
-timespecps_t sub_tsps_ps(timespecps_t* lhs, int64_t ps)
+timespecps_t sub_tsps_ps(const timespecps_t* lhs, const int64_t ps)
 {
     timespecps_t rhs = {.secs = 0, .psecs = ps};
     return sub_tsps_tsps(lhs, &rhs);
 }
 
 
-timespecps_t add_tsps_ps(timespecps_t* lhs, int64_t ps)
+timespecps_t add_tsps_ps(const timespecps_t* lhs, const int64_t ps)
 {
     timespecps_t rhs = {.secs = 0, .psecs = ps};
     return add_tsps_tsps(lhs, &rhs);
 }
 
 
-
-
-double tsps_to_double_ns(timespecps_t* lhs)
+double tsps_to_double_ns(const timespecps_t* lhs)
 {
-    return (double)lhs->psecs/1000 + (double)lhs->secs*PS_IN_SECS/1000;
+    return (double)lhs->psecs/1000.0 + (double)lhs->secs*PS_IN_SECS/1000.0;
 }
 

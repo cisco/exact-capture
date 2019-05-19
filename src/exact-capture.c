@@ -784,7 +784,7 @@ int main (int argc, char** argv)
 //    min_pcap_rec = MIN(sizeof(pcap_pkthdr_t) + sizeof(expcap_pktftr_t),MIN_ETH_PKT);
 //    max_pcap_rec = min_pcap_rec + max_pkt_len;
 
-    cpus_t cpus = {{{0}}};
+    cpus_t cpus = {{0},{0}};
     parse_cpus(options.cpus_str, &cpus);
 
     if (options.calib_flags < 0 || options.calib_flags > 7)
