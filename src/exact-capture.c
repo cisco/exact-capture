@@ -83,6 +83,7 @@ static struct opts
 {
     CH_VECTOR(cstr)* ifaces;
     CH_VECTOR(cstr)* dests;
+    ch_cstr out_format;
     ch_cstr cpus_str;
     ch_word snaplen;
     ch_word calib_flags;
@@ -100,8 +101,8 @@ static struct opts
     bool no_overflow_warn;
     bool debug_log;
     bool no_spinner;
-    bool no_use_huge_pages;
-    bool no_memory_locking;
+    bool use_huge_pages;
+    bool memory_locking;
 } options;
 
 
@@ -520,8 +521,8 @@ void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostrea
     const int64_t disks       = options.dests->count;
     const int64_t rings       = nics * disks;
     const int64_t max_file    = options.max_file;
-    const bool use_huge_pages = !options.no_use_huge_pages;
-    const bool use_mem_lock   = !options.no_memory_locking;
+    const bool use_huge_pages = options.use_huge_pages;
+    const bool use_mem_lock   = options.memory_locking;
 
 
     if(nics > MAX_LTHREADS )
@@ -550,7 +551,6 @@ void allocate_iostreams(eio_stream_t** nic_istreams,  eio_stream_t** ring_ostrea
     {
 
         ch_log_info("Allocating NIC interface %s at NIC index %i\n", *interface, nic_idx);
-
 
         //Allocate / connect each NIC to an istream
         nic_istreams[nic_idx] = alloc_nic(*interface, dummy_nic);
@@ -670,11 +670,18 @@ int main (int argc, char** argv)
     signal (SIGALRM, signal_handler);
     signal (SIGTERM, signal_handler);
 
-    ch_opt_addSU (CH_OPTION_REQUIRED, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
-    ch_opt_addSU (CH_OPTION_REQUIRED, 'o', "output",           "Destination(s) to write to",                       &options.dests);
-    ch_opt_addsu (CH_OPTION_REQUIRED, 'c', "cpus",             "CPUs in the form m:l,l,l:w,w,w",                   &options.cpus_str);
+    ch_opt_short_description(
+"Exact Capture 2.0 - High rate network capture - Copyright (C) 2017,2018,2019");
+    ch_opt_long_description(
+"Exact capture is a high rate network capture application designed for Exablaze\n"
+"ExaNIC network adapters, and ExaDISK NVMe drives.");
+
+    ch_opt_addSU (CH_OPTION_OPTIONAL, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
+    ch_opt_addSU (CH_OPTION_OPTIONAL, 'o', "output",           "Destination(s) to write to",                       &options.dests);
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'F', "out-format",       "Output format, options are [pcap,expcap,blaze]",   &options.out_format, "pcap");
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'c', "cpus",             "CPUs in the form l,l,l:w,w,w",                     &options.cpus_str, "-1:-1");
     ch_opt_addii (CH_OPTION_OPTIONAL, 's', "snaplen",          "Maximum capture length",                           &options.snaplen, 2048);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-promisc",        "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "nopromisc",         "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
     ch_opt_addbi (CH_OPTION_FLAG,      0, "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",          "Maximum file size (<=0 means no max)",             &options.max_file, -1);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file, NULL);
@@ -688,8 +695,8 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL,  0, "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
     ch_opt_addbi (CH_OPTION_FLAG,      0, "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
     ch_opt_addbi (CH_OPTION_FLAG,      0, "no-color",          "Disable colored logging",                          &options.no_color, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-use-huge-pages", "Disable using huge pages ",                        &options.no_use_huge_pages, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-memory-locking", "Disable memory locking",                           &options.no_memory_locking, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "use-huge-pages",    "Enabble using huge pages ",                        &options.use_huge_pages, false);
+    ch_opt_addbi (CH_OPTION_FLAG,      0, "memory-locking",    "Enable memory locking",                            &options.memory_locking, false);
     ch_opt_parse (argc, argv);
 
     fprintf(stderr,"Exact-Capture %i.%i%s (%08X-%08X)\n",
@@ -709,6 +716,16 @@ int main (int argc, char** argv)
 #ifndef NOIFASSERT
     fprintf(stderr,"Warning: This is an assertion build, performance may be affected\n");
 #endif
+
+    if(!options.ifaces->count){
+        fprintf(stderr,"Error: --interface (-i) is not set, cannot continue\n");
+        exit(-1);
+    }
+
+    if(!options.dests->count){
+        fprintf(stderr,"Error: --output (-o) is not set, cannot continue\n");
+        exit(-1);
+    }
 
     if(!options.no_kernel)
         fprintf(stderr,"Warning: --no-kernel flag is not set, performance may be affected\n");
