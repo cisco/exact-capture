@@ -671,32 +671,34 @@ int main (int argc, char** argv)
     signal (SIGTERM, signal_handler);
 
     ch_opt_short_description(
-"Exact Capture 2.0 - High rate network capture - Copyright (C) 2017,2018,2019");
+"Exact Capture 2.0 Copyright (c) Exablaze 2017,2018,2019\n"
+"www.exablaze.com\n"
+"info@exablaze.com\n");
     ch_opt_long_description(
 "Exact capture is a high rate network capture application designed for Exablaze\n"
 "ExaNIC network adapters, and ExaDISK NVMe drives.");
 
-    ch_opt_addSU (CH_OPTION_OPTIONAL, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
-    ch_opt_addSU (CH_OPTION_OPTIONAL, 'o', "output",           "Destination(s) to write to",                       &options.dests);
-    ch_opt_addsi (CH_OPTION_OPTIONAL, 'F', "out-format",       "Output format, options are [pcap,expcap,blaze]",   &options.out_format, "pcap");
-    ch_opt_addsi (CH_OPTION_OPTIONAL, 'c', "cpus",             "CPUs in the form l,l,l:w,w,w",                     &options.cpus_str, "-1:-1");
-    ch_opt_addii (CH_OPTION_OPTIONAL, 's', "snaplen",          "Maximum capture length",                           &options.snaplen, 2048);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "nopromisc",         "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",          "Maximum file size (<=0 means no max)",             &options.max_file, -1);
-    ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file, NULL);
-    ch_opt_addfi (CH_OPTION_OPTIONAL, 't', "log-report-int",   "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
-    ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",          "Verbose output",                                   &options.verbose, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL,  0, "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
-    ch_opt_addbi (CH_OPTION_FLAG,     'd', "debug-logging",    "Turn on debug logging output",                     &options.debug_log, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
-    ch_opt_addii (CH_OPTION_OPTIONAL,  0, "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "no-color",          "Disable colored logging",                          &options.no_color, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "use-huge-pages",    "Enabble using huge pages ",                        &options.use_huge_pages, false);
-    ch_opt_addbi (CH_OPTION_FLAG,      0, "memory-locking",    "Enable memory locking",                            &options.memory_locking, false);
+    ch_opt_addSU (CH_OPTION_MANUAL, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
+    ch_opt_addSU (CH_OPTION_MANUAL, 'o', "output",           "Destination(s) to write to",                       &options.dests);
+    ch_opt_addsi (CH_OPTION_MANUAL, 'F', "out-format",       "Output format, options are [pcap,expcap,blaze]",   &options.out_format, "pcap");
+    ch_opt_addsi (CH_OPTION_MANUAL, 'c', "cpus",             "CPUs in the form l,l,l:w,w,w",                     &options.cpus_str, "-1:-1");
+    ch_opt_addii (CH_OPTION_MANUAL, 's', "snaplen",          "Maximum capture length",                           &options.snaplen, 2048);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "nopromisc",         "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
+    ch_opt_addii (CH_OPTION_MANUAL, 'm', "maxfile",          "Maximum file size (<=0 means no max)",             &options.max_file, -1);
+    ch_opt_addsi (CH_OPTION_MANUAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file, NULL);
+    ch_opt_addfi (CH_OPTION_MANUAL, 't', "log-report-int",   "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
+    ch_opt_addbi (CH_OPTION_FLAG,   'v', "verbose",          "Verbose output",                                   &options.verbose, false);
+    ch_opt_addii (CH_OPTION_MANUAL,  0, "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
+    ch_opt_addbi (CH_OPTION_FLAG,   'd', "debug-logging",    "Turn on debug logging output",                     &options.debug_log, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
+    ch_opt_addii (CH_OPTION_MANUAL,  0, "perf-test",         "Performance test mode [0-7]",                      &options.calib_flags, 0);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "clear-buff",        "Clear all pending rx packets before starting",     &options.clear_buff, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "no-color",          "Disable colored logging",                          &options.no_color, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "use-huge-pages",    "Enabble using huge pages ",                        &options.use_huge_pages, false);
+    ch_opt_addbi (CH_OPTION_FLAG,    0, "memory-locking",    "Enable memory locking",                            &options.memory_locking, false);
     ch_opt_parse (argc, argv);
 
     fprintf(stderr,"Exact-Capture %i.%i%s (%08X-%08X)\n",
