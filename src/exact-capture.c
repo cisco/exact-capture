@@ -44,9 +44,9 @@
 
 
 
-#define EXACT_MAJOR_VER 1
-#define EXACT_MINOR_VER 1
-#define EXACT_VER_TEXT ""
+#define EXACT_MAJOR_VER 2
+#define EXACT_MINOR_VER 0
+#define EXACT_VER_TEXT "-ALPHA"
 
 
 /* Logger settings */
@@ -670,14 +670,15 @@ int main (int argc, char** argv)
     signal (SIGALRM, signal_handler);
     signal (SIGTERM, signal_handler);
 
+
+
     ch_opt_short_description(
-"Exact Capture 2.0 Copyright (c) Exablaze 2017,2018,2019\n"
-"www.exablaze.com\n"
-"info@exablaze.com\n");
+"Exact Capture, high rate capture software:\n");
     ch_opt_long_description(
 "Exact capture is a high rate network capture application designed for Exablaze\n"
-"ExaNIC network adapters, and ExaDISK NVMe drives.");
+"ExaNIC network adapters, and ExaDISK NVMe drives.\n");
 
+    bzero(&options,sizeof(options));
     ch_opt_addSU (CH_OPTION_MANUAL, 'i', "interface",        "Interface(s) to listen on",                        &options.ifaces);
     ch_opt_addSU (CH_OPTION_MANUAL, 'o', "output",           "Destination(s) to write to",                       &options.dests);
     ch_opt_addsi (CH_OPTION_MANUAL, 'F', "out-format",       "Output format, options are [pcap,expcap,blaze]",   &options.out_format, "pcap");
@@ -686,7 +687,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,    0, "nopromisc",         "Do not enable promiscuous mode on the interface",  &options.no_promisc, false);
     ch_opt_addbi (CH_OPTION_FLAG,    0, "no-kernel",         "Do not allow packets to reach the kernel",         &options.no_kernel, false);
     ch_opt_addii (CH_OPTION_MANUAL, 'm', "maxfile",          "Maximum file size (<=0 means no max)",             &options.max_file, -1);
-    ch_opt_addsi (CH_OPTION_MANUAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file, NULL);
+    ch_opt_addsu (CH_OPTION_MANUAL, 'l', "logfile",          "Log file to log output to",                        &options.log_file);
     ch_opt_addfi (CH_OPTION_MANUAL, 't', "log-report-int",   "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
     ch_opt_addbi (CH_OPTION_FLAG,   'v', "verbose",          "Verbose output",                                   &options.verbose, false);
     ch_opt_addii (CH_OPTION_MANUAL,  0, "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
@@ -704,7 +705,7 @@ int main (int argc, char** argv)
     fprintf(stderr,"Exact-Capture %i.%i%s (%08X-%08X)\n",
                 EXACT_MAJOR_VER, EXACT_MINOR_VER, EXACT_VER_TEXT,
                 BRING_SLOT_SIZE, BRING_SLOT_COUNT);
-    fprintf(stderr,"Copyright Exablaze Pty Ltd 2018\n");
+    fprintf(stderr,"Copyright Exablaze Pty Ltd 2017,2018,2019\n");
 
     /*************************************************************************/
     /* Check preconditions and options arguments                             */
@@ -720,12 +721,12 @@ int main (int argc, char** argv)
 #endif
 
     if(!options.ifaces->count){
-        fprintf(stderr,"Error: --interface (-i) is not set, cannot continue\n");
+        ch_opt_print_usage("Error: --interface (-i) is not set, cannot continue\n");
         exit(-1);
     }
 
     if(!options.dests->count){
-        fprintf(stderr,"Error: --output (-o) is not set, cannot continue\n");
+        ch_opt_print_usage("Error: --output (-o) is not set, cannot continue\n");
         exit(-1);
     }
 
