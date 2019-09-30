@@ -137,22 +137,22 @@
                 <p>Exact Capture outputs packet captures to a modified <code>pcap</code> format called <code>expcap</code>.
 The <code>expcap</code> format is a backwards compatible extension to standard <code>pcap</code> format.
 A number of <a href="../utils/">tools and utilities</a> are included for operating on these files and converting them into standard <code>pcap</code> format if necessary.</p>
-<p>For reference, standard <code>pcap</code> files are formatted as follows (more details can be found on the <a href="https://wiki.wireshark.org/Development/LibpcapFileFormat">Wireshark</a> website):
-<img alt="PCAP file format" src="../img/exact-capture-expcap.png" /></p>
+<p>For reference, standard <code>pcap</code> files are formatted as follows (more details can be found on the <a href="https://wiki.wireshark.org/Development/LibpcapFileFormat">Wireshark</a> website):</p>
+<p><img alt="PCAP file format" src="../img/exact-capture-expcap.png" /></p>
 <h2 id="padding-packets">Padding Packets</h2>
 <p>As a performance optimisation, Exact Capture occasionally needs to insert padding packets (e.g. to align to a 4k boundary) into the output file.
 These packets are easily recognizable because <code>pcap</code> header wire length field (as above) is set to 0B, with the on disk length field (again as above) is set to the size of the padding.</p>
 <p>Although setting these header fields precisely captures the semantics of the padding packets (i.e bytes written to disk that were never found on the wire), this is technically a <code>pcap</code> file specification violation.
 Presumably the writers never envisaged this kind of use case.
-Nevertheless, standard tools like <code>Wireshark</code> operate correctly and ignore these packets as they should.
-The following figure depicts a padding packet directly after the file header.
-This will be found in all Exact Capture output files.
-<img alt="EXPCAP file padding" src="../img/exact-capture-expcap-padding.png" /></p>
+Nevertheless, standard tools like <code>Wireshark</code> operate correctly and ignore these packets as they should.</p>
+<p>The following figure depicts a padding packet directly after the file header.
+This will be found in all Exact Capture output files.</p>
+<p><img alt="EXPCAP file padding" src="../img/exact-capture-expcap-padding.png" /></p>
 <h2 id="packet-footers">Packet Footers</h2>
 <p>Each captured packet is extended with a packet footer.
 This footer contains a variety of extra fields, not available in the standard pcap format. When the footer is added, the standard pcap disk bytes field is updated to reflect the extra length on disk. Once again, this means that the byes on disk value may exceed the bytes on the wire value (though not always. e.g. when a snaplength is set). The addition of a footer adds bytes to the disk that were never found on the wire is again, technically a PCAP specification violation. However, once again, standard pcap processing tools like Wireshark operate correctly and ignore these extra bytes as they should.  The above figure shows a representation of expcap packet footers added to the first packet.</p>
-<p>The additional expcap footer fields are described in detail in the table below. They borrow the spirit of some of the fields found in the ERF format.</p>
 <p><img alt="EXPCAP file padding" src="../img/exact-capture-expcap-footer.png" /></p>
+<p>The additional expcap footer fields are described in detail in the table below. They borrow the spirit of some of the fields found in the ERF format.</p>
 <table>
   <tr>
     <th>Field</th>
