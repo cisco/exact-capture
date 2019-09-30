@@ -6,6 +6,7 @@ The system is fully open source and designed for performance as well as ease of 
 It can be used with any ExaNIC network card, and is optimised for use with ExaDisk high speed flash drives. 
 The system can be deployed on any suitably powerful server system. 
 
-For full documentation, please see Exact_Capture_Documentation.pdf
+Full online documentation is available [here](https://code.exablaze.com/exact-capture/)
+
 
 
