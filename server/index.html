@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Server Requirements - Exact Capture Documentation</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Server Requirements";
+    var mkdocs_page_input_path = "server.md";
+    var mkdocs_page_url = "/server/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">Introduction</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../install/">Installation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../quick/">Quick Start</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Server Requirements</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#cpus">CPUs</a></li>
+    
+
+    <li class="toctree-l2"><a href="#ram">RAM</a></li>
+    
+
+    <li class="toctree-l2"><a href="#pcie">PCIe</a></li>
+    
+
+    <li class="toctree-l2"><a href="#exanic">ExaNIC</a></li>
+    
+
+    <li class="toctree-l2"><a href="#disk-drives">Disk Drives</a></li>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../config/">Configuration Guide</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../expcap/">Output Format (expcap)</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../arch/">Internal Architecture</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../utils/">Tools & Utlities</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../versions/">Version History</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Server Requirements</li>
+    <li class="wy-breadcrumbs-aside">
+      
+        <a href="https://github.com/exablaze-oss/exact-capture/edit/master/docs/server.md"
+          class="icon icon-github"> Edit on GitHub</a>
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>You are free to run Exact Capture on any system hardware.
+The following table describes our recommendations for the minimum system hardware requirements.
+For general guidance, we have successfully run the system on suitably configured Dell R230 and R730 machines.
+Any of the Dell R<em>30 and R</em>40 machines are likely to be excellent candidates.</p>
+<h2 id="cpus">CPUs</h2>
+<p><h3>Core Count</h3>
+The number of CPU cores required depends on:</p>
+<ol>
+<li>The number of interfaces that you wish to capture on</li>
+<li>The type and speed of the disk drives</li>
+<li>The maximum capture rate you need to sustain</li>
+</ol>
+<p>Assuming that <strong>ExaDisks</strong> are the target drives, each drive slice is capable of writing at a sustained rate of 10Gb/s.</p>
+<p>As an example, a minimal 10Gb/s Exact Capture installation will require 3 CPU cores.
+One core for a (hot) listener thread, one core for a (cold) disk writer thread and one management core.
+The management core is low priority and can be safely shared with other general purpose system cores.
+The listener thread should not be shared with any other process (i.e. be sure to make use of the isolcpus kernel parameter).</p>
+<p>In general, for n line-rate 10G ports, the system requires 2n + 1 CPU cores. e.g a 4x10G capture system will require 9 cores in total.  </p>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>CPU core counts are based on actual cores, rather than hyperthreads.
+In general, we recommend disabling hyperthreads on CPUs that support them.</p>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>We have had good results with Intel Xeon E5-26xx range CPUs with a 3Ghz+ clock speed. For example the Intel Xeon E5-2643.</p>
+</div>
+<h3>Speed</h3>
+
+<p>The minimum required CPU speed depends on the maximum capture rate required.
+For the purposes of this document, we assume that 10G line rate, at minimum sized (64B) frames is the capture rate requirement (i.e. approx. 14 million packets per second ).</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>We have found that 3Ghz+ CPUs are sufficient.</p>
+</div>
+<h2 id="ram">RAM</h2>
+<p>RAM usage will vary based on the number of NICs and disks that you are using.
+By default, each memory queue is organised into 256x 2MB slots for a total memory usage of approximately 512MB per queue.
+The total number of memory queues the product of the number of hot (ExaNIC) and cold (ExaDisk) threads.
+For a minimal 10Gb/s capture solution, with a single ExaNIC and ExaDisk, only 1 memory queue is required for a total of approximately 512MB of memory.
+For 4x10Gbs system, with 4 disks, 4x4 = 16 queues will be required, for a minimum memory usage of  ~8GB.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>We recommend at least 16GB of DDR IV RAM in your machine.</p>
+</div>
+<h2 id="pcie">PCIe</h2>
+<p>For sustained, minimum sized packet capture, each 10Gb/s ExaNIC interface requires approximately 4x PCIe Gen 3 lanes.
+The hot threads must run on the CPU socket directly connected to these PCIe lanes.</p>
+<p>For sustained high performance writing, each ExaDisk interface requires 2x PCIe Gen 3 lanes.<br />
+The cold threads must run on the CPU socket directly connected to these PCIe lanes.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>For optimal performance, w recommend running PCIe Gen3x8 for all cards connected.</p>
+</div>
+<h2 id="exanic">ExaNIC</h2>
+<p>All ExaNIC network cards will work with Exact Capture.
+Following is a summary of the features, requirements and limitations of each card:</p>
+<ul>
+<li><strong>ExaNIC X10 / GM (2x 10GbE)</strong> - these cards can be used without restriction on suitable PCIe Gen 3x8 slots.
+  Timestamp resolution is 6.2ns.</li>
+<li><strong>ExaNIC HPT (2x 10GbE)</strong>  - these cards can be used without restriction on suitable PCIe Gen 3x8 slots.
+  Timestamp resolution is 0.25ns (250ps)</li>
+<li><strong>ExaNIC X40 / VXP (8x 10GbE)</strong> - Only 2 ports can be used at line rate for all packet sizes. Up to 4 ports can be used at larger (average) packet sizes (e.g. 512B+).
+  Timestamp resolution is 6.2ns.</li>
+<li><strong>ExaNIC X40 (2x 40GbE)</strong> - Speeds up to 20Gb/s are likely to work out of the box on any single interface (though this is untested).
+  Load balancing/packet spraying across multiple receive rings is also likely to assist line rate capture, though this is feature is not (yet) implemented.</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>ExaNIC X10 and ExaNIC HPT devices are currently optimal.</p>
+</div>
+<h2 id="disk-drives">Disk Drives</h2>
+<p>Exact Capture is tested and optimized to run on <em>ExaDisk FX1</em> NVMe SSD drives.
+Each ExaDisk is capable of running 40Gb/s sustained write speed to disk in a PCIe Gen 3x 8 slot.
+The drives are currently available in 4TB and 8TB capacities.</p>
+<p>The system will (in principle) operate with any disks.
+High speed flash drives, especially NVMe disks are highly recommended to keep the number of threads and memory usage down.
+For slower disks (e.g. SATA based flash disks) sharing CPU cores for writer threads is likely to reduce the CPU core count requirements without affecting overall performance.
+This is untested.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip</p>
+<p>ExaDISK FX1 (8TB) is the recommended disk drive</p>
+</div>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../config/" class="btn btn-neutral float-right" title="Configuration Guide">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../quick/" class="btn btn-neutral" title="Quick Start"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+          <a href="https://github.com/exablaze-oss/exact-capture/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
+      
+      
+        <span><a href="../quick/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../config/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>

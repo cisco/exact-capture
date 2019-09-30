@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Output Format (expcap) - Exact Capture Documentation</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Output Format (expcap)";
+    var mkdocs_page_input_path = "expcap.md";
+    var mkdocs_page_url = "/expcap/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="..">Introduction</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../install/">Installation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../quick/">Quick Start</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../server/">Server Requirements</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../config/">Configuration Guide</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Output Format (expcap)</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#padding-packets">Padding Packets</a></li>
+    
+
+    <li class="toctree-l2"><a href="#packet-footers">Packet Footers</a></li>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../arch/">Internal Architecture</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../utils/">Tools & Utlities</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../versions/">Version History</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Output Format (expcap)</li>
+    <li class="wy-breadcrumbs-aside">
+      
+        <a href="https://github.com/exablaze-oss/exact-capture/edit/master/docs/expcap.md"
+          class="icon icon-github"> Edit on GitHub</a>
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>Exact Capture outputs packet captures to a modified <code>pcap</code> format called <code>expcap</code>.
+The <code>expcap</code> format is a backwards compatible extension to standard <code>pcap</code> format.
+A number of <a href="../utils/">tools and utilities</a> are included for operating on these files and converting them into standard <code>pcap</code> format if necessary.</p>
+<p>For reference, standard <code>pcap</code> files are formatted as follows (more details can be found on the <a href="https://wiki.wireshark.org/Development/LibpcapFileFormat">Wireshark</a> website):
+<img alt="PCAP file format" src="../img/exact-capture-expcap.png" /></p>
+<h2 id="padding-packets">Padding Packets</h2>
+<p>As a performance optimisation, Exact Capture occasionally needs to insert padding packets (e.g. to align to a 4k boundary) into the output file.
+These packets are easily recognizable because <code>pcap</code> header wire length field (as above) is set to 0B, with the on disk length field (again as above) is set to the size of the padding.</p>
+<p>Although setting these header fields precisely captures the semantics of the padding packets (i.e bytes written to disk that were never found on the wire), this is technically a <code>pcap</code> file specification violation.
+Presumably the writers never envisaged this kind of use case.
+Nevertheless, standard tools like <code>Wireshark</code> operate correctly and ignore these packets as they should.
+The following figure depicts a padding packet directly after the file header.
+This will be found in all Exact Capture output files.
+<img alt="EXPCAP file padding" src="../img/exact-capture-expcap-padding.png" /></p>
+<h2 id="packet-footers">Packet Footers</h2>
+<p>Each captured packet is extended with a packet footer.
+This footer contains a variety of extra fields, not available in the standard pcap format. When the footer is added, the standard pcap disk bytes field is updated to reflect the extra length on disk. Once again, this means that the byes on disk value may exceed the bytes on the wire value (though not always. e.g. when a snaplength is set). The addition of a footer adds bytes to the disk that were never found on the wire is again, technically a PCAP specification violation. However, once again, standard pcap processing tools like Wireshark operate correctly and ignore these extra bytes as they should.  The above figure shows a representation of expcap packet footers added to the first packet.</p>
+<p>The additional expcap footer fields are described in detail in the table below. They borrow the spirit of some of the fields found in the ERF format.</p>
+<p><img alt="EXPCAP file padding" src="../img/exact-capture-expcap-footer.png" /></p>
+<table>
+  <tr>
+    <th>Field</th>
+    <th>Width (bits)</th>    
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>Time (seconds)</td>
+    <td>32</td>    
+    <td>
+      Time in seconds since the epoch
+    </td>
+  </tr>
+  <tr>
+    <td>Time (picoseconds)</td>
+    <td>40</td>    
+    <td>
+      Time in picoseconds since the last second boundary
+    </td>
+  </tr>
+  <tr>
+    <td>Flags</td>
+    <td>8</td>    
+    <td>    
+      The following flags bits are currently supported:
+
+      <ol>
+        <li> New CRC Calculated (The CRC field contains a new new value including the footer) </li>
+        <li> Frame aborted - this frame was aborted on the wire by the sender.</li>
+        <li> Frame corrupt - the hardware CRC checker detected an error with this frame.</li>
+        <li> Frame truncated - this packet was longer than the snap length and has been truncated. </li>
+      </ol>
+    </td>
+  </tr>
+  <tr>
+    <td>Device ID Number</td>
+    <td>8</td>    
+    <td>    
+      The ID of the device that captured these packets.
+      For example, when capturing on the exanic3:7 interface, the device number would be 3.
+    </td>
+  </tr>
+  <tr>
+    <td>Port ID Number</td>
+    <td>8</td>    
+    <td>        
+      The port on the device that was used to capture the packet.
+      For example, capturing on exanic3:7 interface, the port number would be 7.  
+    </td>
+  </tr>
+  <tr>
+    <td>CRC top</td>
+    <td>16</td>    
+    <td>            
+      If the new CRC flag <strong>is not</strong> set, contains the number of packets dropped between this packet and the previous packet.
+      Otherwise this is the top 16 bits of the new CRC.
+    </td>
+  </tr>
+  <tr>
+    <td>CRC bottom</td>
+    <td>16</td>    
+    <td>            
+      If the new CRC flag <strong>is</strong> set, contains the bottom 16 bits of the new CRC. Otherwise, unused.
+    </td>
+  </tr>
+<table>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../arch/" class="btn btn-neutral float-right" title="Internal Architecture">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../config/" class="btn btn-neutral" title="Configuration Guide"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+          <a href="https://github.com/exablaze-oss/exact-capture/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
+      
+      
+        <span><a href="../config/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../arch/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+
+</body>
+</html>
