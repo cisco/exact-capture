@@ -3,6 +3,7 @@ The `expcap` format is a backwards compatible extension to standard `pcap` forma
 A number of [tools and utilities](utils.md) are included for operating on these files and converting them into standard `pcap` format if necessary.
 
 For reference, standard `pcap` files are formatted as follows (more details can be found on the [Wireshark](https://wiki.wireshark.org/Development/LibpcapFileFormat) website):
+
 ![PCAP file format](img/exact-capture-expcap.png)
 
 
@@ -13,8 +14,10 @@ These packets are easily recognizable because `pcap` header wire length field (a
 Although setting these header fields precisely captures the semantics of the padding packets (i.e bytes written to disk that were never found on the wire), this is technically a `pcap` file specification violation.
 Presumably the writers never envisaged this kind of use case.
 Nevertheless, standard tools like `Wireshark` operate correctly and ignore these packets as they should.
+
 The following figure depicts a padding packet directly after the file header.
 This will be found in all Exact Capture output files.
+
 ![EXPCAP file padding](img/exact-capture-expcap-padding.png)
 
 
@@ -22,9 +25,10 @@ This will be found in all Exact Capture output files.
 Each captured packet is extended with a packet footer.
 This footer contains a variety of extra fields, not available in the standard pcap format. When the footer is added, the standard pcap disk bytes field is updated to reflect the extra length on disk. Once again, this means that the byes on disk value may exceed the bytes on the wire value (though not always. e.g. when a snaplength is set). The addition of a footer adds bytes to the disk that were never found on the wire is again, technically a PCAP specification violation. However, once again, standard pcap processing tools like Wireshark operate correctly and ignore these extra bytes as they should.  The above figure shows a representation of expcap packet footers added to the first packet.
 
+![EXPCAP file padding](img/exact-capture-expcap-footer.png)
+
 The additional expcap footer fields are described in detail in the table below. They borrow the spirit of some of the fields found in the ERF format.
 
-![EXPCAP file padding](img/exact-capture-expcap-footer.png)
 
 
 <table>
