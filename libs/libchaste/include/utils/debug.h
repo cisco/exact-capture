@@ -16,12 +16,12 @@ typedef enum {
     DBG,
     ERR,
     WARN
-} ch_dbg_mode_e;
+} bcap_debug_mode_e;
 
 
 ch_word ch_debug_out_(
         ch_bool info,
-        ch_dbg_mode_e mode,
+        bcap_debug_mode_e mode,
         ch_word line_num,
         const char* filename,
         const char* function,
