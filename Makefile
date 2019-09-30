@@ -43,5 +43,11 @@ install: all
 uninstall:
 	rm -f $(foreach file,$(BIN),$(PREFIX)/bin/$(file))
 
+.PHONY: docs
+docs:
+	$(MAKE) -C docs/
+
 clean:
 	rm -rf bin/*
+	$(MAKE) -C docs/ clean
+
