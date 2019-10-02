@@ -35,12 +35,20 @@ typedef enum {
 } exactio_exa_mod_t;
 
 
+static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
+                             bool promisc, bool kernel_bypass);
 
-static void exa_destroy(eio_stream_t* this)
+void exa_destroy(eio_stream_t* this)
 {
     exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
     if(priv->closed){
         return;
+    }
+
+    if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port, 0, 0))
+    {
+        printf ("Unable to restore promisc and kernel bypass mode\n");
     }
 
     if(priv->rx){
@@ -233,7 +241,9 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
 
     if(promisc)
         ifr.ifr_flags |= IFF_PROMISC;
-
+    else {
+        ifr.ifr_flags &= ~IFF_PROMISC;
+    }
     ifr.ifr_flags |= IFF_UP;
 
     if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
@@ -241,10 +251,6 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
         exit(1);
     }
-
-
-    if(!kernel_bypass)
-        return 0;
 
 
     /* Get flag names and current setting */
@@ -269,7 +275,13 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         exit(1);
     }
 
-    flags |= (1 << i);
+    if (kernel_bypass)
+       flags |= (1 << i);
+    else flags = 0;
+
+    if (!promisc) { 
+       ifr.ifr_flags &= ~IFF_PROMISC;
+    }
 
     /* Set flags */
     if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
@@ -279,7 +291,7 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
                                   : strerror(errno));
         exit(1);
     }
-
+    close (fd);
     return 0;
 }
 
@@ -321,9 +333,12 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
             return 1;
         }
 
-        if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
-                             promisc,kernel_bypass)){
-            return 1;
+        /* avoid reset from writer */
+        if (promisc || kernel_bypass) { 
+            if (set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
+                             promisc, kernel_bypass)){
+                return 1;
+            }
         }
 
     }
