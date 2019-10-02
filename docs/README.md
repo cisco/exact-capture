@@ -1,14 +1,12 @@
 # Exact Capture Documentation
-=============================
+-----------------------------
 
 ## mkdocs
----------------
 Exact capture documentation is written using (mkdocs)[https://www.mkdocs.org/].
 All of the documentation pages can be found in markdown format in the `src` directory.
 Configuration for mkdocs is found in `mkdocs.yml`.
 
 ## Requirements
----------------
 - pipenv
 - mkdocs 1.x
 
@@ -16,7 +14,6 @@ To ensure a consistent output, the build process uses `pipenv`.
 Settings for pipenv can be found in the `Pipfile` and `Pipfile.lock`
 
 ## Building
------------
 Pipenv should resolve and install dependencies automatically.
 It is called directly from the makefile. To build simply run:
 
