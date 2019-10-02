@@ -142,8 +142,8 @@ The following table lists all commands available:
     </td>      
   </tr>
   <tr>
-    <td>n</td>
-    <td>no-spin</td>
+    <td>p</td>
+    <td>perf-test</td>
     <td><em>(flag)</em></td>
     <td>                          
       Exact Capture supports several performance testing modes.

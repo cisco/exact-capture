@@ -1,14 +1,18 @@
+env = pipenv run
+
+
 all: docs	
 .PHONY all:
 
+
 test: 
-	mkdocs serve
+	$(env) mkdocs serve
 
 publish:
-	mkdocs gh-deploy
+	$(env) mkdocs gh-deploy
 
 docs:
-	mkdocs build --clean
+	$(env) mkdocs build --clean
 
 clean:
 	rm -rf site
