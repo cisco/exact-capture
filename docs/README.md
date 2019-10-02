@@ -39,6 +39,24 @@ To install `pipenv` run
 ```
 $ sudo pip install pipenv
 ```
+**Note**
+-----------------
+The following error is common on Ubuntu based systems: 
+
+```
+    import distutils.spawn
+ModuleNotFoundError: No module named 'distutils.spawn'
+
+Failed to create virtual environment.
+```
+
+To resolve you need to install `python3-distuilts`. 
+You can do this as follows: 
+```
+$ sudp apt-get install python3-distutils
+```
+-----------------
+
 
 To install `mkdocs` run (inside the exact-capture documentation directory)
 ```
