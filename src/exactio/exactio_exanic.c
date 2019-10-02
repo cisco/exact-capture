@@ -48,7 +48,7 @@ void exa_destroy(eio_stream_t* this)
 
     if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port, 0, 0))
     {
-        ch_log_error("Unable to restore promisc and kernel bypass mode\n");
+        ch_log_warn("Unable to restore promisc and kernel bypass mode\n");
     }
 
     if(priv->rx){
