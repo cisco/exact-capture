@@ -35,42 +35,6 @@ typedef enum {
 } exactio_exa_mod_t;
 
 
-static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
-                             bool promisc, bool kernel_bypass);
-
-void exa_destroy(eio_stream_t* this)
-{
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-
-    if(priv->closed){
-        return;
-    }
-
-    if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port, 0, 0))
-    {
-        ch_log_warn("Unable to restore promisc and kernel bypass mode\n");
-    }
-
-    if(priv->rx){
-        exanic_release_rx_buffer(priv->rx);
-    }
-
-    if(priv->tx){
-        exanic_release_tx_buffer(priv->tx);
-    }
-
-    if(priv->rx_nic){
-        exanic_release_handle(priv->rx_nic);
-    }
-
-    if(priv->tx_nic){
-        exanic_release_handle(priv->tx_nic);
-    }
-
-    priv->closed = true;
-
-}
-
 
 
 //Write operations
@@ -239,9 +203,9 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         exit(1);
     }
 
-    if(promisc)
+    if(promisc){
         ifr.ifr_flags |= IFF_PROMISC;
-    else {
+    }else{
         ifr.ifr_flags &= ~IFF_PROMISC;
     }
     ifr.ifr_flags |= IFF_UP;
@@ -275,11 +239,12 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         exit(1);
     }
 
-    if (kernel_bypass)
+    if(kernel_bypass){
        flags |= (1 << i);
-    else flags = 0;
-
-    if (!promisc) { 
+    }else{
+       flags = 0;
+    }
+    if(!promisc){ 
        ifr.ifr_flags &= ~IFF_PROMISC;
     }
 
@@ -337,6 +302,7 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
         if (promisc || kernel_bypass) { 
             if (set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
                              promisc, kernel_bypass)){
+                ch_log_error("Unable to set promisc and/or kernel bypass mode\n");
                 return 1;
             }
         }
@@ -374,6 +340,39 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     return 0;
 
 }
+
+void exa_destroy(eio_stream_t* this)
+{
+    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    if(priv->closed){
+        return;
+    }
+
+    if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port, 0, 0)){
+        ch_log_warn("Unable to restore promisc and kernel bypass mode\n");
+    }
+
+    if(priv->rx){
+        exanic_release_rx_buffer(priv->rx);
+    }
+
+    if(priv->tx){
+        exanic_release_tx_buffer(priv->tx);
+    }
+
+    if(priv->rx_nic){
+        exanic_release_handle(priv->rx_nic);
+    }
+
+    if(priv->tx_nic){
+        exanic_release_handle(priv->tx_nic);
+    }
+
+    priv->closed = true;
+
+}
+
 
 NEW_IOSTREAM_DEFINE(exa,exa_args_t, exa_priv_t)
 
