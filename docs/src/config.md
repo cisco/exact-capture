@@ -133,11 +133,20 @@ The following table lists all commands available:
     </td>      
   </tr>
   <tr>
-    <td>n</td>
+    <td>S</td>
     <td>no-spin</td>
     <td><em>(flag)</em></td>
     <td>                          
       By default Exact Capture outputs a progress “spinner” to the console.
+      This flag disables it.
+    </td>      
+  </tr>
+  <tr>
+    <td>n</td>
+    <td>no-promisc</td>
+    <td><em>(flag)</em></td>
+    <td>                          
+      By default Exact Capture puts the NIC into promiscuous mode.
       This flag disables it.
     </td>      
   </tr>
