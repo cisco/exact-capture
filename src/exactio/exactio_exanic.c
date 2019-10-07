@@ -227,7 +227,7 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1 ||
             ioctl(fd, SIOCGIFFLAGS, &ifr) == -1)
     {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
+        fprintf(stderr, "ioctl(SIOCGIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
         exit(1);
     }
 
@@ -238,14 +238,12 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
 
     if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
     {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
+        fprintf(stderr, "ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
         exit(1);
     }
 
-
     if(!kernel_bypass)
         return 0;
-
 
     /* Get flag names and current setting */
     char flag_names[32][ETH_GSTRING_LEN];
@@ -253,7 +251,7 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     if (ethtool_get_flag_names(fd, ifr.ifr_name, flag_names) == -1 ||
         ethtool_get_priv_flags(fd, ifr.ifr_name, &flags) == -1)
     {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
+        fprintf(stderr, "ethtool_get_priv_flags: %s:%d: %s\n", device, port_number, strerror(errno));
         exit(1);
     }
 
@@ -274,7 +272,7 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     /* Set flags */
     if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
     {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number,
+        fprintf(stderr, "ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
                 (errno == EINVAL) ? "Feature not supported on this port"
                                   : strerror(errno));
         exit(1);
