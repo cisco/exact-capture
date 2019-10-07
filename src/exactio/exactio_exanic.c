@@ -231,15 +231,24 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         exit(1);
     }
 
-    if(promisc)
-        ifr.ifr_flags |= IFF_PROMISC;
+    int ifr_changed = 0;
 
+    if(promisc)
+    {
+        ifr_changed |= !(ifr.ifr_flags & IFF_PROMISC);
+        ifr.ifr_flags |= IFF_PROMISC;
+    }
+
+    ifr_changed |= !(ifr.ifr_flags & IFF_UP);
     ifr.ifr_flags |= IFF_UP;
 
-    if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
+    if (ifr_changed)
     {
-        fprintf(stderr, "ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+        if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
+        {
+            fprintf(stderr, "ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
+            exit(1);
+        }
     }
 
     if(!kernel_bypass)
@@ -267,15 +276,20 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
         exit(1);
     }
 
+    int flags_changed = !(flags & (1 << i));
+
     flags |= (1 << i);
 
-    /* Set flags */
-    if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
+    if (flags_changed)
     {
-        fprintf(stderr, "ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
-                (errno == EINVAL) ? "Feature not supported on this port"
-                                  : strerror(errno));
-        exit(1);
+        /* Set flags */
+        if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
+        {
+            fprintf(stderr, "ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
+                    (errno == EINVAL) ? "Feature not supported on this port"
+                                      : strerror(errno));
+            exit(1);
+        }
     }
 
     return 0;
