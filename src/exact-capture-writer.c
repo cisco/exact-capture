@@ -428,7 +428,7 @@ void* writer_thread (void* params)
         {
             eio_des (ostream);
             if (open_file (dest, wparams->dummy_ostream, &ostream,
-                           istreams[curr_istream].file_id ))
+                           ++istreams[curr_istream].file_id ))
             {
                 ch_log_error("Could not open new output file\n");
                 goto finished;
