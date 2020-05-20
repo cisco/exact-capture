@@ -192,6 +192,7 @@ void* writer_thread (void* params)
     {
         istreams[iface_idx].dev_id   = wparams->exanic_dev_id[iface_idx];
         istreams[iface_idx].port_num = wparams->exanic_port_id[iface_idx];
+        istreams[iface_idx].file_id  = 1; 
 
         const char* iface = ifaces->first[iface_idx];
 
@@ -434,6 +435,7 @@ void* writer_thread (void* params)
                 goto finished;
             }
             bytes_written = 0;
+            istreams[curr_istream].file_id++;
         }
     }
 
