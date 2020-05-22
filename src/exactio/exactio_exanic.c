@@ -208,6 +208,7 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     }else{
         ifr.ifr_flags &= ~IFF_PROMISC;
     }
+    /* set IFF_UP independent on status */
     ifr.ifr_flags |= IFF_UP;
 
     if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
@@ -242,7 +243,8 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     if(kernel_bypass){
        flags |= (1 << i);
     }else{
-       flags = 0;
+       /* only clear bypass_only flag */
+       flags &= ~(1 << i);
     }
     if(!promisc){ 
        ifr.ifr_flags &= ~IFF_PROMISC;
