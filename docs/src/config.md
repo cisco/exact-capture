@@ -149,7 +149,7 @@ The following table lists all commands available:
       Exact Capture supports several performance testing modes.
       These can be used to give a sense of the best possible performance that you can expect from your system configuration.
       The modes are as follows:
-      <ol>
+      <ol start="0">
         <li> No performance testing </li>
         <li>
           Replace all ExaNIC interfaces with a dummy interface.
