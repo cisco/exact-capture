@@ -1131,7 +1131,7 @@ int main (int argc, char** argv)
 
 
     int spinner_idx = 0;
-#define spinner_len 4
+    #define spinner_len 4
     char spinner[spinner_len] = {'|','/', '-', '\\'};
     if(!(options.verbose || options.more_verbose_lvl || options.log_lprot) && !options.no_spinner)
         fprintf(stderr,"Exact Capture running... %c \r", spinner[spinner_idx]);
@@ -1144,7 +1144,7 @@ int main (int argc, char** argv)
     while (!lstop)
     {
 
-        if(!(options.verbose || options.more_verbose_lvl) && !options.no_spinner)
+        if(!(options.verbose || options.more_verbose_lvl || options.log_lprot) && !options.no_spinner)
         {
             fprintf(stderr,"Exact Capture running... %c \r", spinner[spinner_idx]);
             spinner_idx++;
