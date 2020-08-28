@@ -377,12 +377,7 @@ static void print_llprot( int64_t timenow, int tid, listener_params_t lparams, l
 
 static void print_wlprot( int64_t timenow, int tid, writer_params_t wparams, wstats_t wstats)
 {
-
-
-    ch_log_info("Writer:%02i %-17s -- %.2fGbps (%.2fGbps wire %.2fGbps disk) %.2fMpps %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins\n");
-
-    ch_log_info("exact-capture,type=writer,source=%i,file=\"%s\" tid=%ii packet_bytes=%lii wire_bytes=%lii to_disk_bytes=%lii packets=%lii spins=%lii %li\n",
-
+    ch_log_info("exact-capture,type=writer,output=\"%s\" tid=%ii packet_bytes=%lii wire_bytes=%lii to_disk_bytes=%lii packets=%lii spins=%lii %li\n",
           wparams.destination,
           tid,
 
