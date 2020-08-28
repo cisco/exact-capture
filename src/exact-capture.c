@@ -706,7 +706,7 @@ static void print_stats_basic_totals(lstats_t ldelta_total, wstats_t wdelta_tota
 
 
     /* TODO - There must be a better way to do this... */
-    if(options.log_file)
+    if(options.log_file && !options.log_lprot)
     {
         ch_log_info("Exact Capture finished\n");
         if(options.more_verbose_lvl == 2)
