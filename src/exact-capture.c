@@ -1133,7 +1133,7 @@ int main (int argc, char** argv)
     int spinner_idx = 0;
 #define spinner_len 4
     char spinner[spinner_len] = {'|','/', '-', '\\'};
-    if(!(options.verbose || options.more_verbose_lvl) && !options.no_spinner)
+    if(!(options.verbose || options.more_verbose_lvl || options.log_lprot) && !options.no_spinner)
         fprintf(stderr,"Exact Capture running... %c \r", spinner[spinner_idx]);
 
     if(options.log_file)
@@ -1217,7 +1217,7 @@ int main (int argc, char** argv)
         /* Process the writer thread stats */
         wdelta_total = wempty;
         for (int tid = 0;
-                (options.more_verbose_lvl || options.verbose) && tid < wthreads->count;
+                (options.more_verbose_lvl || options.verbose || options.log_lprot) && tid < wthreads->count;
                 wstats_prev[tid] = wstats_now[tid], tid++)
         {
 
