@@ -352,7 +352,7 @@ fail:
 
 static void print_llprot( int64_t timenow, int tid, listener_params_t lparams, lstats_t lstats, pstats_t pstats)
 {
-    ch_log_info("exact-capture,type=listener,source=\"%s:%i\",device=%s:%i tid=%ii sw_bytes=%lii sw_packets=%lii sw_dropped=%lii sw_errors=%li sw_swofl=%ii spins1=%lii spinsP=%lii hw_packets=%lii hw_ignored=%ii hw_errors=%ii hw_dropped=%i %li\n",
+    ch_log_info("exact-capture,type=listener,source=%s:%i tid=%ii sw_bytes=%lii sw_packets=%lii sw_dropped=%lii sw_errors=%li sw_swofl=%ii spins1=%lii spinsP=%lii hw_packets=%lii hw_ignored=%ii hw_errors=%ii hw_dropped=%i %li\n",
           lparams_list[tid].exanic_dev,
           lparams_list[tid].exanic_port,
 
