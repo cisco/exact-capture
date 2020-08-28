@@ -97,6 +97,7 @@ static struct
     ch_word calib_mode;
     ch_word max_file;
     ch_cstr log_file;
+    ch_bool log_lprot;
     ch_bool verbose;
     ch_word more_verbose_lvl;
     ch_float log_report_int_secs;
@@ -346,6 +347,55 @@ fail:
 
 
 }
+
+
+
+static void print_llprot( int64_t timenow, int tid, listener_params_t lparams, lstats_t lstats, pstats_t pstats)
+{
+    ch_log_info("exact-capture,type=listener,source=\"%s:%i\",device=%s:%i tid=%ii sw_bytes=%lii sw_packets=%lii sw_dropped=%lii sw_errors=%li sw_swofl=%ii spins1=%lii spinsP=%lii hw_packets=%lii hw_ignored=%ii hw_errors=%ii hw_dropped=%i %li\n",
+          lparams_list[tid].exanic_dev,
+          lparams_list[tid].exanic_port,
+
+          tid,
+
+          lstats.bytes_rx,
+          lstats.packets_rx,
+          lstats.dropped,
+          lstats.errors,
+          lstats.swofl,
+          lstats.spins1_rx,
+          lstats.spinsP_rx,
+
+          pstats.rx_count,
+          pstats.rx_ignored_count,
+          pstats.rx_error_count,
+          pstats.rx_dropped_count,
+          timenow
+      );
+}
+
+
+static void print_wlprot( int64_t timenow, int tid, writer_params_t wparams, wstats_t wstats)
+{
+
+
+    ch_log_info("Writer:%02i %-17s -- %.2fGbps (%.2fGbps wire %.2fGbps disk) %.2fMpps %.2fMB (%.2fMB %.2fMB) %li Pkts %.3fM Spins\n");
+
+    ch_log_info("exact-capture,type=writer,source=%i,file=\"%s\" tid=%ii packet_bytes=%lii wire_bytes=%lii to_disk_bytes=%lii packets=%lii spins=%lii %li\n",
+
+          wparams.destination,
+          tid,
+
+          wstats.pcbytes, /* captured packet bytes */
+          wstats.plbytes, /* wire length packet bytes (e.g. if snapping) */
+          wstats.dbytes,  /* to disk bytes */
+          wstats.packets,
+          wstats.spins,
+
+          timenow
+      );
+}
+
 
 
 
@@ -941,6 +991,7 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",           "Maximum file size (<=0 means no max)",             &options.max_file, -1);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",           "Log file to log output to",                        &options.log_file, NULL);
     ch_opt_addfi (CH_OPTION_OPTIONAL, 't', "log-report-int",    "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
+    ch_opt_addbi (CH_OPTION_FLAG,     'L', "log-lprot",         "Log using Influxdb Line Protocol format",          &options.log_lprot, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",           "Verbose output",                                   &options.verbose, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'V', "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
     ch_opt_addbi (CH_OPTION_FLAG,     'T', "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
@@ -948,6 +999,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,     'w', "no-warn-overflow",  "No warning on overflows",                          &options.no_overflow_warn, false);
     ch_opt_addbi (CH_OPTION_FLAG,     'S', "no-spin",           "No spinner on the output",                         &options.no_spinner, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'p', "perf-test",         "Performance test mode [0-7]",                      &options.calib_mode, 0);
+
 
     ch_opt_parse (argc, argv);
 
@@ -1134,6 +1186,14 @@ int main (int argc, char** argv)
                 pstats_prev[tid] = pstats_now[tid],
                 tid++)
         {
+
+            if(options.log_lprot)
+            {
+                print_llprot(now_ns,tid,lparams_list[tid],lstats_now[tid], pstats_now[tid]);
+                continue; //No need to calculate anything else
+            }
+
+
             lstats_t lstats_delta = lstats_subtract(
                     &lstats_now[tid],
                     &lstats_prev[tid]);
@@ -1154,7 +1214,7 @@ int main (int argc, char** argv)
 
         }
 
-        if(options.verbose)
+        if(options.verbose && !options.log_lprot)
         {
             print_lstats_totals(ldelta_total,pdelta_total, delta_ns);
         }
@@ -1165,6 +1225,13 @@ int main (int argc, char** argv)
                 (options.more_verbose_lvl || options.verbose) && tid < wthreads->count;
                 wstats_prev[tid] = wstats_now[tid], tid++)
         {
+
+            if(options.log_lprot)
+            {
+                print_wlprot(now_ns,tid,wparams_list[tid],wstats_now[tid]);
+                continue;
+            }
+
             wstats_t wstats_delta = wstats_subtract(&wstats_now[tid], &wstats_prev[tid]);
             wdelta_total = wstats_add(&wdelta_total, &wstats_delta);
 
@@ -1175,7 +1242,7 @@ int main (int argc, char** argv)
 
         }
 
-        if(options.verbose)
+        if(options.verbose && !options.log_lprot)
         {
             print_wstats_totals(wdelta_total, delta_ns);
         }
