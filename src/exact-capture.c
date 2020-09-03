@@ -1094,6 +1094,8 @@ int main (int argc, char** argv)
             ch_log_error("Could not connect to InfluxDB %s\n",ifwr_lasterr_str(&ifdb));
             return -1;
         }
+
+        ch_log_info("Connected to InfluxDB at http:%s:%i\n", ifdb.hostname, ifdb.port);
     }
 
     remove_dups(options.interfaces);
