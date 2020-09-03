@@ -393,6 +393,17 @@ static void log_winflux( ifwr_conn_t* ifdb, int64_t timenow, int tid, writer_par
 
           timenow
       );
+
+    if(ifwr_response(ifdb)){
+        char* json_msg;
+        const int http_err = ifwr_http_err(ifdb,&json_msg);
+        ch_log_error("Failed writing to InfluxDB with error code %i : \"%s\"",
+                http_err,
+                json_msg);
+        return;
+    }
+
+    ch_log_debug1("Successfully sent InfluxDB Message\n");
 }
 
 
