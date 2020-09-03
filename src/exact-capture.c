@@ -28,6 +28,9 @@
 #include <chaste/log/log_levels.h>
 #include <chaste/timing/timestamp.h>
 
+#include <influx-writer/influx-writer-headeronly.h>
+#include <inih/ini.h>
+
 #include "data_structs/pthread_vec.h"
 #include "data_structs/eiostream_vec.h"
 #include "data_structs/pcap-structures.h"
@@ -41,8 +44,9 @@
 #include "exact-capture-listener.h"
 #include "exact-capture-writer.h"
 
+
 #define EXACT_MAJOR_VER 1
-#define EXACT_MINOR_VER 0
+#define EXACT_MINOR_VER 1
 #define EXACT_VER_TEXT ""
 
 
@@ -97,7 +101,7 @@ static struct
     ch_word calib_mode;
     ch_word max_file;
     ch_cstr log_file;
-    ch_bool log_lprot;
+    ch_cstr log_influx;
     ch_bool verbose;
     ch_word more_verbose_lvl;
     ch_float log_report_int_secs;
@@ -350,9 +354,9 @@ fail:
 
 
 
-static void print_llprot( int64_t timenow, int tid, listener_params_t lparams, lstats_t lstats, pstats_t pstats)
+static void log_linflux(ifwr_conn_t* ifdb, int64_t timenow, int tid, listener_params_t lparams, lstats_t lstats, pstats_t pstats)
 {
-    ch_log_info("exact-capture,type=listener,source=%s:%i,tid=%ii sw_bytes=%lii,sw_packets=%lii,sw_dropped=%lii,sw_errors=%li,sw_swofl=%ii,spins1=%lii,spinsP=%lii,hw_packets=%lii,hw_ignored=%ii,hw_errors=%ii,hw_dropped=%i %li\n",
+    ifwr_write_raw(ifdb, "exact-capture,type=listener,source=%s:%i,tid=%ii sw_bytes=%lii,sw_packets=%lii,sw_dropped=%lii,sw_errors=%li,sw_swofl=%ii,spins1=%lii,spinsP=%lii,hw_packets=%lii,hw_ignored=%ii,hw_errors=%ii,hw_dropped=%i %li\n",
           lparams_list[tid].exanic_dev,
           lparams_list[tid].exanic_port,
 
@@ -375,9 +379,9 @@ static void print_llprot( int64_t timenow, int tid, listener_params_t lparams, l
 }
 
 
-static void print_wlprot( int64_t timenow, int tid, writer_params_t wparams, wstats_t wstats)
+static void log_winflux( ifwr_conn_t* ifdb, int64_t timenow, int tid, writer_params_t wparams, wstats_t wstats)
 {
-    ch_log_info("exact-capture,type=writer,output=\"%s\",tid=%ii packet_bytes=%lii,wire_bytes=%lii,to_disk_bytes=%lii,packets=%lii,spins=%lii %li\n",
+    ifwr_write_raw(ifdb, "exact-capture,type=writer,output=\"%s\",tid=%ii packet_bytes=%lii,wire_bytes=%lii,to_disk_bytes=%lii,packets=%lii,spins=%lii %li\n",
           wparams.destination,
           tid,
 
@@ -706,7 +710,7 @@ static void print_stats_basic_totals(lstats_t ldelta_total, wstats_t wdelta_tota
 
 
     /* TODO - There must be a better way to do this... */
-    if(options.log_file && !options.log_lprot)
+    if(options.log_file)
     {
         ch_log_info("Exact Capture finished\n");
         if(options.more_verbose_lvl == 2)
@@ -964,6 +968,35 @@ static void remove_dups(CH_VECTOR(cstr)* opt_vec)
 
 
 
+//Ini file parsing with inih
+#define MATCH(s, n) strcmp(section, s) == 0 && strcmp(name, n) == 0
+static int parser(void* user, const char* section, const char* name,
+                   const char* value)
+{
+    ifwr_conn_t* conn = (ifwr_conn_t*)user;
+
+    if (MATCH("influxdb", "hostname")) {
+        conn->hostname = strdup(value);
+    }
+    else if (MATCH("influxdb", "port")) {
+        conn->port = atoi(value);
+    }
+    else if (MATCH("influxdb", "organization")) {
+        conn->org = strdup(value);
+    }
+    else if (MATCH("influxdb", "bucket")) {
+        conn->bucket = strdup(value);
+    }
+    else if (MATCH("influxdb", "token")) {
+        conn->token = strdup(value);
+    }
+    else {
+        return 0;  /* unknown section/name, error */
+    }
+    return 1;
+}
+
+
 /**
  * Main loop sets up threads and listens for stats / configuration messages.
  */
@@ -986,7 +1019,7 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL, 'm', "maxfile",           "Maximum file size (<=0 means no max)",             &options.max_file, -1);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 'l', "logfile",           "Log file to log output to",                        &options.log_file, NULL);
     ch_opt_addfi (CH_OPTION_OPTIONAL, 't', "log-report-int",    "Log reporting interval (in secs)",                 &options.log_report_int_secs, 1);
-    ch_opt_addbi (CH_OPTION_FLAG,     'L', "log-lprot",         "Log using Influxdb Line Protocol format",          &options.log_lprot, false);
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'L', "log-influx",        "Log to Influxdb with the config file given",       &options.log_influx, NULL );
     ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",           "Verbose output",                                   &options.verbose, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'V', "more-verbose-lvl",  "More verbose output level [1-2]",                  &options.more_verbose_lvl, 0);
     ch_opt_addbi (CH_OPTION_FLAG,     'T', "no-log-ts",         "Do not use timestamps on logs",                    &options.no_log_ts, false);
@@ -1032,7 +1065,7 @@ int main (int argc, char** argv)
         ch_log_info("Exact-Capture %i.%i%s (%08X-%08X)\n",
                     EXACT_MAJOR_VER, EXACT_MINOR_VER, EXACT_VER_TEXT,
                     BRING_SLOT_SIZE, BRING_SLOT_COUNT);
-        ch_log_info("Copyright Exablaze Pty Ltd 2018\n");
+        ch_log_info("Copyright Exablaze Pty Ltd 2020\n");
 
 #ifndef NDEBUG
         ch_log_warn("Warning: This is a debug build, performance may be affected\n");
@@ -1045,6 +1078,22 @@ int main (int argc, char** argv)
         if(!options.no_kernel)
             fprintf(stderr,"Warning: --no-kernel flag is not set, performance may be affected\n");
 
+    }
+
+    //Set up the Influx DB connection parameters
+    ifwr_conn_t ifdb = {0};
+    if(options.log_influx)
+    {
+        if (ini_parse(options.log_influx, parser, &ifdb) < 0) {
+            ch_log_error("Could not load InfluxDB config \"%s\"\n", options.log_influx);
+            return 1;
+        }
+
+        //Connect to the database
+        if(ifwr_connect(&ifdb)){
+            ch_log_error("Could not connect to InfluxDB %s\n",ifwr_lasterr_str(&ifdb));
+            return -1;
+        }
     }
 
     remove_dups(options.interfaces);
@@ -1133,7 +1182,7 @@ int main (int argc, char** argv)
     int spinner_idx = 0;
     #define spinner_len 4
     char spinner[spinner_len] = {'|','/', '-', '\\'};
-    if(!(options.verbose || options.more_verbose_lvl || options.log_lprot) && !options.no_spinner)
+    if(!(options.verbose || options.more_verbose_lvl) && !options.no_spinner)
         fprintf(stderr,"Exact Capture running... %c \r", spinner[spinner_idx]);
 
     if(options.log_file)
@@ -1144,7 +1193,7 @@ int main (int argc, char** argv)
     while (!lstop)
     {
 
-        if(!(options.verbose || options.more_verbose_lvl || options.log_lprot) && !options.no_spinner)
+        if(!(options.verbose || options.more_verbose_lvl) && !options.no_spinner)
         {
             fprintf(stderr,"Exact Capture running... %c \r", spinner[spinner_idx]);
             spinner_idx++;
@@ -1182,9 +1231,9 @@ int main (int argc, char** argv)
                 tid++)
         {
 
-            if(options.log_lprot)
+            if(options.log_influx)
             {
-                print_llprot(now_ns,tid,lparams_list[tid],lstats_now[tid], pstats_now[tid]);
+                log_linflux(&ifdb, now_ns,tid,lparams_list[tid],lstats_now[tid], pstats_now[tid]);
                 continue; //No need to calculate anything else
             }
 
@@ -1209,7 +1258,7 @@ int main (int argc, char** argv)
 
         }
 
-        if(options.verbose && !options.log_lprot)
+        if(options.verbose)
         {
             print_lstats_totals(ldelta_total,pdelta_total, delta_ns);
         }
@@ -1217,13 +1266,13 @@ int main (int argc, char** argv)
         /* Process the writer thread stats */
         wdelta_total = wempty;
         for (int tid = 0;
-                (options.more_verbose_lvl || options.verbose || options.log_lprot) && tid < wthreads->count;
+                (options.more_verbose_lvl || options.verbose || options.log_influx) && tid < wthreads->count;
                 wstats_prev[tid] = wstats_now[tid], tid++)
         {
 
-            if(options.log_lprot)
+            if(options.log_influx)
             {
-                print_wlprot(now_ns,tid,wparams_list[tid],wstats_now[tid]);
+                log_winflux(&ifdb,now_ns,tid,wparams_list[tid],wstats_now[tid]);
                 continue;
             }
 
@@ -1237,7 +1286,7 @@ int main (int argc, char** argv)
 
         }
 
-        if(options.verbose && !options.log_lprot)
+        if(options.verbose)
         {
             print_wstats_totals(wdelta_total, delta_ns);
         }

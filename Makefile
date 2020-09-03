@@ -11,6 +11,8 @@ BIN=bin/exact-capture bin/exact-pcap-extract bin/exact-pcap-parse bin/exact-pcap
 EXACTCAP_SRCS=$(wildcard src/*.c) $(wildcard src/**/*.c)   
 EXACTCAP_HDRS=$(wildcard src/*.h) $(wildcard src/**/*.h) 
 LIBCHASTE_HDRS=$(wildcard libs/chaste/*.h) $(wildcard libs/chaste/**/*.h) 
+LIBINIH_SRCS=$(wildcard libs/inih/*.c)
+LIBINIH_HDRS=$(wildcard libs/inih/*.h)
 
 all: CFLAGS = $(RELEASE_CFLAGS)
 all: $(BIN)
@@ -21,9 +23,9 @@ assert: $(BIN)
 debug: CFLAGS = $(DEBUG_CFLAGS)
 debug: $(BIN)
 
-bin/exact-capture: $(EXACTCAP_SRCS) $(EXACTCAP_HDRS) $(LIBCASHTE_HDRS) 	
+bin/exact-capture: $(EXACTCAP_SRCS) $(EXACTCAP_HDRS) $(LIBCASHTE_HDRS) $(LIBINIH_HDRS) $(LIBINIH_SRCS)
 	mkdir -p bin
-	$(CC) $(CFLAGS) $(EXACTCAP_SRCS) $(LDFLAGS) -lm -lexanic -lpthread -lrt -o $@ 
+	$(CC) $(CFLAGS) $(EXACTCAP_SRCS) $(LIBINIH_SRCS) $(LDFLAGS) -lm -lexanic -lpthread -lrt -o $@ 
 
 bin/exact-pcap-parse: utils/exact-pcap-parse.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	mkdir -p bin
