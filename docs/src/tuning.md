@@ -74,7 +74,7 @@ echo 1 > /proc/irq/default_smp_affinity
 for i in $(ls /proc/irq/); do echo 1 > /proc/irq/$i/smp_affinity ; done
 ```
 
-Ensuring that interrupts raised by the disks used with exact-capture are serviced by the same cores as writer threads can improve caching performance. On this server, exact-capture is configured to use cores 1 and 3 for listen threads, and cores 5,7,9 and 11 for writer threads:
+Ensuring that interrupts raised by the disks used with exact-capture are serviced by the same cores used by writer threads can improve caching performance. On this server, exact-capture is configured to use cores 1 and 3 for listen threads, and cores 5,7,9 and 11 for writer threads:
 
 ```
 ./bin/exact-capture --cpus 0:1,3:5,7,9,11 ...
