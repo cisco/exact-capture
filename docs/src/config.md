@@ -49,6 +49,15 @@ The following table lists all commands available:
       If there are fewer writer threads than <code>--outputs</code>, writer threads will be reused.
     </td>
   <tr>
+    <td>k</td>
+    <td>no-kernel</td>
+    <td><em>(flag)</em></td>
+    <td>      
+      Prevents packets from reaching the kernel, by disabling interrupt generation for packets arriving on the ports used by exact-capture.
+      It is recommended to always enable this option, to ensure the best performance from exact-capture.
+    </td>      
+  </tr>
+  <tr>
     <td>s</td>
     <td>snaplen</td>
     <td>2048B</td>
