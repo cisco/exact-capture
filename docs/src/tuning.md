@@ -29,6 +29,8 @@ The output of `lspci` can be used to determine the NUMA locality of installed ha
         NUMA node: 1
 ```
 
+The `-d` option when used with `lspci` allows the user to filter the devices displayed by vendor ID. Exablaze devices have the vendor ID `1ce4` and on this server where ExaDisks are in use, the NUMA node used by both the ExaNIC and ExaDisk can be queried in a single command. If ExaDisks are not in use, users should query lspci using the correct vendor ID for their own disks.
+
 Once the node of the installed hardware is known, the user should note which logical CPU cores are part of this node. This can be determined by the `lspcu` command:
 
 ```
@@ -44,13 +46,35 @@ On this system, the only cores that should be used for listen/write threads are 
 
 Ensuring that the user's CPU is correctly configured is vital to ensuring the performance of exact-capture. Any CPU cores that are used for listen/write threads should be configured as part of the [Kernel Boot Configuration](https://exablaze.com/docs/exanic/user-guide/benchmarking/#kernel-boot-configuration) guide referenced earlier. These cores need to be specified in the `isolcpus`, `nohz_full` and `rcu_nocbs` parameters.
 
+Before starting exact-capture, ensure that the CPU cores to be used are not running in a power-saving state. One way to ensure the CPU is not running in a power-saving state before starting exact-capture is to cause all cores to (temporarily) spin on writing 0's to `/dev/null/`:
+
+```
+for cpu in {0..11}
+do
+    taskset -c $cpu timeout 10 dd if=/dev/zero of=/dev/null &
+done
+```
+
+After doing so, check the running frequency of the selected CPU cores (our CPU has a max frequency of 3.6Ghz, per the ouput of `lscpu`):
+```
+for cpu in /sys/devices/system/cpu/cpu*/cpufreq
+do
+    cat $cpu/cpuinfo_cur_freq
+done
+3601078
+```
+
+This confirms that all of the CPU cores on this server will run at their max frequency, before starting exact-capture.
+
 ## CPU core selection
 
 Exact-capture's `--cpus` option allows the user to select which CPU cores are allocated for management, listen and write threads (see the [Configuration Guide](./config.md) and [Internal Architecture](./arch.md) for more information). The cores chosen for listen/write threads should be configured per the [CPU configuration](#cpu-configuration) section. The core chosen for management does not need to be isolated, but it should not be shared with the cores used for listen/write threads.
 
 ## Interrupt configuration
 
-Both ExaNICs and capture disks can raise interrupts which will impact the performance of the capture server, if they are not steered away from cores used for listen/write threads. The output of `cat /proc/interrupts` to determine whether the selected cores are servicing interrupts:
+Both ExaNICs and capture disks can raise interrupts which can adversely impact the performance of exact-capture if the host is not configured appropriately. Servicing interrupts on cores used by listener threads is very disruptive to the performance of listener threads. When an interrupt is serviced by a core which is being used by a listener thread, the cached instructions belonging to the listener thread will be lost as the CPU fetches the instructions for the interrupt handler. That core will then execute the interrupt handler and finally return control to the listener thread (which will need to fetch it's instructions from memory all over again). To ensure that exact-capture can maintain losseless packet capture at high data rates, interrupts should not be serviced on cores used by listener threads.
+
+While exact capture is running, examine the output of `cat /proc/interrupts` to determine whether the which cores are servicing interrupts:
 
 ```
 [root@capture ~]# cat /proc/interrupts | grep -E 'CPU|exanic|nvme'
@@ -65,33 +89,35 @@ Both ExaNICs and capture disks can raise interrupts which will impact the perfor
 
 ```
 
-Note the IRQ number in the leftmost column. On this server, CPU1 is still servicing interrupts for both NVMe storage drivres and the ExaNICs (there may be other devices also raising interrupts on these cores). This will impede the performance of exact-capture, if listen threads are started on CPU0 or CPU1.
+Note the IRQ number in the leftmost column. On this server, CPU1 is still servicing interrupts for both NVMe storage drives and the ExaNICs (there may be other devices also raising interrupts on these cores). This will impede the performance of exact-capture, if listen threads are started on CPU0 or CPU1.
 
-The performance of exact-capture can be improved by first steering all interrupts away from CPU1:
+Interrupt steering can be configured by setting `smp_affinity` correctly in procfs. `smp_affinity` is a bitmask which determines which CPUs can be used to service a given IRQ number, where the least significant bit corresponds to CPU0. First, force all interrupts to be serviced by CPU0:
 
 ```
 echo 1 > /proc/irq/default_smp_affinity
 for i in $(ls /proc/irq/); do echo 1 > /proc/irq/$i/smp_affinity ; done
 ```
 
-Ensuring that interrupts raised by the disks used with exact-capture are serviced by the same cores used by writer threads can improve caching performance. On this server, exact-capture is configured to use cores 1 and 3 for listen threads, and cores 5,7,9 and 11 for writer threads:
+Next, allow any CPU cores not used by listener cores to service interrupts generated by the capture disks. For this server, CPU0 is used for management, CPU1 and CPU3 are used for listener threads and CPU5, CPU7, CPU9 and CPU11 are used for writer threads:
 
 ```
 ./bin/exact-capture --cpus 0:1,3:5,7,9,11 ...
 ```
 
-Setting the `smp_affinity` bitmask in procfs will cause the interrupts (IRQ numbers 57-117) raised by the NVMe drives to be serviced by cores 5,7,9 and 11. The core used for the management thread can also be allowed to service interrupts generated by capture drives.
+In this case, the correct value for the `smp_affinity` bitmask is `111111110101`, or `FF5`. This will mask off CPU1 and CPU3 and allow interrupts to capture disks to be serviced on any core. The correct IRQ numbers can be determined from the output of `cat /proc/interrupts` as above. In this case, the capture disks have IRQ numbers 57-117. With this in mind, setting the `smp_affinity` for each IRQ number can be achieved by the following command:
 
 ```
-for i in {57..117}; do echo AA1 > /proc/irq/$i/smp_affinity ; done
+for i in {57..117}; do echo FF5 > /proc/irq/$i/smp_affinity ; done
 ```
 
 The kernel documentation for [IRQ affinity](https://www.kernel.org/doc/Documentation/IRQ-affinity.txt) offers a detailed guide for configuring `smp_affinity` values.
 
+!!! note
+    It is recommended to disable interrupt generation completely for ExaNICs which are solely used for packet capture. This can be achieved by enabling [Bypass-only mode](https://exablaze.com/docs/exanic/user-guide/config/#bypass-only-mode), which can be automatically enabled by exact-capture by supplying the `--no-kernel` option.
 
 ## Troubleshooting
 
-The `--perf-test` option offers a number of utilities useful for diagnosing performance bottlenecks in a given system. These options can be conbined with the `--verbose` and `--more-verbose 2` to assess whether a server has been optimally configured. Check the [Configuration Guide](./config.md) for the list of supported performance testing options.
+The `--perf-test` option offers a number of utilities useful for diagnosing performance bottlenecks in a given system. These options can be combined with the `--verbose` and `--more-verbose 2` to assess whether a server has been optimally configured. Check the [Configuration Guide](./config.md) for the list of supported performance testing options.
 
 For example, the `--perf-test 3` can be used to evaluate the write performance of a given system:
 
