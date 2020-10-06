@@ -12,6 +12,7 @@ nav:
     - Quick Start: quick.md
     - Server Requirements: server.md
     - Configuration Guide: config.md
+    - Performance Tuning: tuning.md
     - Output Format (expcap): expcap.md
     - Internal Architecture: arch.md
     - Tools & Utlities: utils.md
