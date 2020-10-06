@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="canonical" href="http://exact-capture.io/tuning/">
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Performance Tuning - Exact Capture Documentation</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
+
+  <link rel="stylesheet" href="../css/theme.css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Performance Tuning";
+    var mkdocs_page_input_path = "tuning.md";
+    var mkdocs_page_url = "/tuning/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+        <a href=".." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../quick/">Quick Start</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../server/">Server Requirements</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
+                    </li>
+                </ul>
+                <ul class="current">
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Performance Tuning</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#getting-started">Getting started</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#numa-systems">NUMA systems</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#cpu-configuration">CPU configuration</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#cpu-core-selection">CPU core selection</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#interrupt-configuration">Interrupt configuration</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a>
+    </li>
+    </ul>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../expcap/">Output Format (expcap)</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../versions/">Version History</a>
+                    </li>
+                </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="..">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Performance Tuning</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="performance-tuning">Performance Tuning</h1>
+<p>Ensuring that the correct options and server settings ensures that exact-capture is running in an optimal manner. This document will detail a number of performance tuning techniques that can be used to improve the behaviour of exact-capture.</p>
+<h2 id="getting-started">Getting started</h2>
+<p>The ExaNIC documentation covers a number of useful tuning techniques in order to ensure that ExaNICs are being used in an optimal manner. Many of these optimizations will also improve capture performance. The user should consult the following sections of the ExaNIC benchmarking guide before reading on:</p>
+<ul>
+<li><a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#bios-configuration">BIOS Configuration</a></li>
+<li><a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#kernel-build-configuration">Kernel Build Configuration</a></li>
+<li><a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#kernel-boot-configuration">Kernel Boot Configuration</a></li>
+<li><a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#hardware-configuration">Hardware Configuration</a></li>
+</ul>
+<h2 id="numa-systems">NUMA systems</h2>
+<p>On multi-socket systems, users should take care to ensure that capture hardware is local to a single socket. Pushing capture traffic over a CPU interconnect will lead to suboptimal capture performance, as traffic may be bottlenecked by this inter-CPU connection.</p>
+<p>The output of <code>lspci</code> can be used to determine the NUMA locality of installed hardware. On a server which has two ExaNICs and one ExaDisk installed, the NUMA locality can be quickly determined:</p>
+<pre><code>[root@capture ~]# lspci -d 1ce4: -vvv |grep NUMA
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+        NUMA node: 1
+</code></pre>
+
+<p>The <code>-d</code> option when used with <code>lspci</code> allows the user to filter the devices displayed by vendor ID. Exablaze devices have the vendor ID <code>1ce4</code> and on this server where ExaDisks are in use, the NUMA node used by both the ExaNIC and ExaDisk can be queried in a single command. If ExaDisks are not in use, users should query lspci using the correct vendor ID for their own disks.</p>
+<p>Once the node of the installed hardware is known, the user should note which logical CPU cores are part of this node. This can be determined by the <code>lspcu</code> command:</p>
+<pre><code>[root@capture ~]# lscpu |grep NUMA
+NUMA node(s):          2
+NUMA node0 CPU(s):     0,2,4,6,8,10
+NUMA node1 CPU(s):     1,3,5,7,9,11
+</code></pre>
+
+<p>On this system, the only cores that should be used for listen/write threads are 1,3,5,7,9,11 which are local to the same NUMA node as the hardware that will be used for packet capture.</p>
+<h2 id="cpu-configuration">CPU configuration</h2>
+<p>Ensuring that the user's CPU is correctly configured is vital to ensuring the performance of exact-capture. Any CPU cores that are used for listen/write threads should be configured as part of the <a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#kernel-boot-configuration">Kernel Boot Configuration</a> guide referenced earlier. These cores need to be specified in the <code>isolcpus</code>, <code>nohz_full</code> and <code>rcu_nocbs</code> parameters.</p>
+<p>Before starting exact-capture, ensure that the CPU cores to be used are not running in a power-saving state. One way to ensure the CPU is not running in a power-saving state before starting exact-capture is to cause all cores to (temporarily) spin on writing 0's to <code>/dev/null/</code>:</p>
+<pre><code>for cpu in {0..11}
+do
+    taskset -c $cpu timeout 10 dd if=/dev/zero of=/dev/null &amp;
+done
+</code></pre>
+
+<p>After doing so, check the running frequency of the selected CPU cores (our CPU has a max frequency of 3.6Ghz, per the ouput of <code>lscpu</code>):</p>
+<pre><code>for cpu in /sys/devices/system/cpu/cpu*/cpufreq
+do
+    cat $cpu/cpuinfo_cur_freq
+done
+3601078
+</code></pre>
+
+<p>This confirms that all of the CPU cores on this server will run at their max frequency, before starting exact-capture.</p>
+<h2 id="cpu-core-selection">CPU core selection</h2>
+<p>Exact-capture's <code>--cpus</code> option allows the user to select which CPU cores are allocated for management, listen and write threads (see the <a href="../config/">Configuration Guide</a> and <a href="../arch/">Internal Architecture</a> for more information). The cores chosen for listen/write threads should be configured per the <a href="#cpu-configuration">CPU configuration</a> section. The core chosen for management does not need to be isolated, but it should not be shared with the cores used for listen/write threads.</p>
+<h2 id="interrupt-configuration">Interrupt configuration</h2>
+<p>Both ExaNICs and capture disks can raise interrupts which can adversely impact the performance of exact-capture if the host is not configured appropriately. Servicing interrupts on cores used by listener threads is very disruptive to the performance of listener threads. When an interrupt is serviced by a core which is being used by a listener thread, the cached instructions belonging to the listener thread will be lost as the CPU fetches the instructions for the interrupt handler. That core will then execute the interrupt handler and finally return control to the listener thread (which will need to fetch it's instructions from memory all over again). To ensure that exact-capture can maintain losseless packet capture at high data rates, interrupts should not be serviced on cores used by listener threads.</p>
+<p>While exact capture is running, examine the output of <code>cat /proc/interrupts</code> to determine whether the which cores are servicing interrupts:</p>
+<pre><code>[root@capture ~]# cat /proc/interrupts | grep -E 'CPU|exanic|nvme'
+            CPU0       CPU1       CPU2       CPU3       CPU4       CPU5       CPU6       CPU7       CPU8       CPU9       CPU10      CPU11
+  57:      50931      29339          0          0          0         40          0          0          0          0          0          0   PCI-MSI-edge      nvme0q0, nvme0q1
+  59:      52418      29480          0          0          0         56          0          0          0          0          0          0   PCI-MSI-edge      nvme1q0, nvme1q1
+  ...
+ 116:      21370      33252          0          0          0          0          0          0          0          0          0          0   PCI-MSI-edge      nvme4q7
+ 117:          0          0          0          0          0          0          0          0          0          0          0          0   PCI-MSI-edge      nvme4q8
+ 143:     205804      16367          0          0          0          0          0          0          0          0          0          0   PCI-MSI-edge      exanic0
+ 145:     108387      15031          0          0          0          0          0          0          0          0          0          0   PCI-MSI-edge      exanic1
+
+</code></pre>
+
+<p>Note the IRQ number in the leftmost column. On this server, CPU1 is still servicing interrupts for both NVMe storage drives and the ExaNICs (there may be other devices also raising interrupts on these cores). This will impede the performance of exact-capture, if listen threads are started on CPU0 or CPU1.</p>
+<p>Interrupt steering can be configured by setting <code>smp_affinity</code> correctly in procfs. <code>smp_affinity</code> is a bitmask which determines which CPUs can be used to service a given IRQ number, where the least significant bit corresponds to CPU0. First, force all interrupts to be serviced by CPU0:</p>
+<pre><code>echo 1 &gt; /proc/irq/default_smp_affinity
+for i in $(ls /proc/irq/); do echo 1 &gt; /proc/irq/$i/smp_affinity ; done
+</code></pre>
+
+<p>Next, allow any CPU cores not used by listener cores to service interrupts generated by the capture disks. For this server, CPU0 is used for management, CPU1 and CPU3 are used for listener threads and CPU5, CPU7, CPU9 and CPU11 are used for writer threads:</p>
+<pre><code>./bin/exact-capture --cpus 0:1,3:5,7,9,11 ...
+</code></pre>
+
+<p>In this case, the correct value for the <code>smp_affinity</code> bitmask is <code>111111110101</code>, or <code>FF5</code>. This will mask off CPU1 and CPU3 and allow interrupts to capture disks to be serviced on any core. The correct IRQ numbers can be determined from the output of <code>cat /proc/interrupts</code> as above. In this case, the capture disks have IRQ numbers 57-117. With this in mind, setting the <code>smp_affinity</code> for each IRQ number can be achieved by the following command:</p>
+<pre><code>for i in {57..117}; do echo FF5 &gt; /proc/irq/$i/smp_affinity ; done
+</code></pre>
+
+<p>The kernel documentation for <a href="https://www.kernel.org/doc/Documentation/IRQ-affinity.txt">IRQ affinity</a> offers a detailed guide for configuring <code>smp_affinity</code> values.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>It is recommended to disable interrupt generation completely for ExaNICs which are solely used for packet capture. This can be achieved by enabling <a href="https://exablaze.com/docs/exanic/user-guide/config/#bypass-only-mode">Bypass-only mode</a>, which can be automatically enabled by exact-capture by supplying the <code>--no-kernel</code> option.</p>
+</div>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p>The <code>--perf-test</code> option offers a number of utilities useful for diagnosing performance bottlenecks in a given system. These options can be combined with the <code>--verbose</code> and <code>--more-verbose 2</code> to assess whether a server has been optimally configured. Check the <a href="../config/">Configuration Guide</a> for the list of supported performance testing options.</p>
+<p>For example, the <code>--perf-test 3</code> can be used to evaluate the write performance of a given system:</p>
+<pre><code>./bin/exact-capture -i exanic0:0 -i exanic0:1 -o /mnt/exadisk0/test0 -o /mnt/exadisk1/test1 -o /mnt/exadisk2/test2 -o /mnt/exadisk3/test3 -c 0:1,3:5,7,9,11 -k -v -V 2 -p 2
+...
+[20200908T112533.543]: Listener:00 exanic0:0 (0.0) -- 0.00Gbps 0.00Mpps (HW:0.00iMpps) 0.00MB 0 Pkts (HW:0 Pkts) [lost?:0] (4569.582M Spins1 0.000M SpinsP ) 0errs 0drp 0swofl 0hwofl
+[20200908T112533.543]: Listener:01 exanic0:1 (0.1) -- 0.00Gbps 0.00Mpps (HW:0.00iMpps) 0.00MB 40 Pkts (HW:40 Pkts) [lost?:0] (4562.232M Spins1 0.000M SpinsP ) 0errs 0drp 0swofl 0hwofl
+[20200908T112533.543]: Total - All Listeners       -- 0.00Gbps 0.00Mpps (HW:0.00iMpps) 0.00MB 40 Pkts (HW:40 Pkts) [lost?:0] (9131.814M Spins1 0.000M SpinsP ) 0errs 0drp 0swofl 0hwofl
+[20200908T112533.543]: Writer:00 .t/exadisk0/test0 -- 6.55Gbps (6.55Gbps wire 9.82Gbps disk) 12.79Mpps 16212.34MB (16212.34MB 24320.00MB) 265623040 Pkts 0.000M Spins
+[20200908T112533.543]: Writer:01 .t/exadisk0/test0 -- 5.41Gbps (5.41Gbps wire 8.12Gbps disk) 10.57Mpps 13397.85MB (13397.85MB 20098.00MB) 219510356 Pkts 0.000M Spins
+[20200908T112533.543]: Writer:02 .t/exadisk0/test0 -- 6.00Gbps (6.00Gbps wire 9.00Gbps disk) 11.72Mpps 14851.09MB (14851.09MB 22278.00MB) 243320316 Pkts 0.000M Spins
+[20200908T112533.543]: Writer:03 .t/exadisk0/test0 -- 6.05Gbps (6.05Gbps wire 9.08Gbps disk) 11.83Mpps 14989.75MB (14989.75MB 22486.00MB) 245592092 Pkts 0.000M Spins
+[20200908T112533.543]: Total - All Writers         -- 24.01Gbps (24.01Gbps wire 36.02Gbps disk) 46.90Mpps 59451.04MB (59451.04MB 89182.00MB) 974045804 Pkts 0.000M Spins
+Exact Capture finished
+    HW Received:        40 packets (  0.000 MP/s )
+    SW Received:        40 packets (  0.000 MP/s )
+                         0 MB      (  0.000 Gb/s )
+       SW Wrote: 974045804 packets ( 46.902 MP/s )
+                     59451 MB      ( 24.014 Gb/s )
+ Lost HW/SW (?):         0 packets (  0.000 MP/s )
+     Lost RX/WR:         0 packets (  0.000 MP/s )
+                         0 MB      (  0.000 Gb/s )
+        Dropped:         0 packets (  0.000 MP/s )
+    SW Overflows:         0 times   (  0.000 /s   )
+
+</code></pre>
+
+<p>We can observe that this system is capable of writing ~36.02Gbps to the disks specified.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../expcap/" class="btn btn-neutral float-right" title="Output Format (expcap)">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../config/" class="btn btn-neutral" title="Configuration Guide"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../config/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../expcap/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js" defer></script>
+      <script src="../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>
