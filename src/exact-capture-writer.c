@@ -192,7 +192,6 @@ void* writer_thread (void* params)
     {
         istreams[iface_idx].dev_id   = wparams->exanic_dev_id[iface_idx];
         istreams[iface_idx].port_num = wparams->exanic_port_id[iface_idx];
-        istreams[iface_idx].file_id  = 1; 
 
         const char* iface = ifaces->first[iface_idx];
 
@@ -283,11 +282,13 @@ void* writer_thread (void* params)
     }
 
     eio_stream_t* ostream = NULL;
+    int64_t file_id = 0;
     if (open_file (dest, wparams->dummy_ostream, &ostream, 0))
     {
         ch_log_error("Could not open new output file\n");
         goto finished;
     }
+    file_id++;
 
 
     //**************************************************************************
@@ -429,13 +430,13 @@ void* writer_thread (void* params)
         {
             eio_des (ostream);
             if (open_file (dest, wparams->dummy_ostream, &ostream,
-                           istreams[curr_istream].file_id ))
+                           file_id ))
             {
                 ch_log_error("Could not open new output file\n");
                 goto finished;
             }
+            file_id++;
             bytes_written = 0;
-            istreams[curr_istream].file_id++;
         }
     }
 
