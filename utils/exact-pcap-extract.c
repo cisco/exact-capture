@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 All rights reserved.
+ * Copyright (c) 2017,2018,2019 All rights reserved.
  * See LICENSE.txt for full details.
  *
  *  Created:     1 March 2018
@@ -24,6 +24,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <math.h>
 
 #include <chaste/types/types.h>
 #include <chaste/data_structs/vector/vector_std.h>
@@ -34,7 +35,7 @@
 
 #include "src/data_structs/pcap-structures.h"
 #include "src/data_structs/expcap.h"
-
+#include "src/data_structs/fusion_hpt.h"
 
 USE_CH_LOGGER_DEFAULT; //(CH_LOG_LVL_DEBUG3, true, CH_LOG_OUT_STDERR, NULL);
 USE_CH_OPTIONS;
@@ -54,6 +55,8 @@ static struct
     ch_word device;
     ch_bool all;
     ch_bool skip_runts;
+    ch_word hpt_device;
+    ch_word hpt_port;
 } options;
 
 enum out_format_type {
@@ -181,7 +184,7 @@ void new_file(buff_t* wr_buff, int file_num)
     ch_log_info("Writing PCAP header to fd=%i\n", wr_buff->fd);
     if(write(wr_buff->fd,&hdr,sizeof(hdr)) != sizeof(hdr))
     {
-        ch_log_fatal("Could not write PCAP header"); 
+        ch_log_fatal("Could not write PCAP header");
         /*TDOD: handle this failure more gracefully */
     }
 
@@ -189,7 +192,10 @@ void new_file(buff_t* wr_buff, int file_num)
 
 void flush_to_disk(buff_t* wr_buff, int64_t* file_bytes_written, int64_t packets_written)
 {
-    ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
+    (void)packets_written;
+    (void)file_bytes_written;
+
+    //ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
     /* Not enough space in the buffer, time to flush it */
     const uint64_t written = write(wr_buff->fd,wr_buff->data,wr_buff->offset);
     if(written < wr_buff->offset)
@@ -228,7 +234,6 @@ void next_packet(buff_t* buff)
 
 
 
-
 /**
  * Main loop sets up threads and listens for stats / configuration messages.
  */
@@ -255,6 +260,8 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL, 'u', "usecpcap", "PCAP output in microseconds", &options.usec, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'S', "snaplen",  "Maximum packet length", &options.snaplen, 1518);
     ch_opt_addbi (CH_OPTION_FLAG,     'r', "skip-runts", "Skip runt packets", &options.skip_runts, false);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 'D', "hpt-device", "Fusion HPT device-tagged packets to extract", &options.hpt_device, -1);
+    ch_opt_addii (CH_OPTION_OPTIONAL, 't', "hpt-port", "Fusion HPT port-tagged packets to extract", &options.hpt_port, -1);
     ch_opt_parse (argc, argv);
 
     options.max_file *= 1024 * 1024; /* Convert max file size from MB to B */
@@ -360,6 +367,9 @@ int main (int argc, char** argv)
     int64_t dropped_padding = 0;
     int64_t dropped_runts   = 0;
     int64_t dropped_errors  = 0;
+    int64_t dropped_errors_abrt   = 0;
+    int64_t dropped_errors_crpt   = 0;
+    int64_t dropped_errors_swofl  = 0;
 
     i64 count = 0;
     for(int i = 0; !lstop ; i++)
@@ -436,7 +446,7 @@ begin_loop:
                 continue;
             }
 
-            if(pkt_hdr->caplen < 64){
+            if(pkt_hdr->caplen < 46){
                 ch_log_debug1("Skipping over runt frame %i (buffer %i) \n",
                               pkt_idx, buff_idx);
                 dropped_runts++;
@@ -463,6 +473,16 @@ begin_loop:
                 (pkt_ftr->flags & EXPCAP_FLAG_CRPT) ||
                 (pkt_ftr->flags & EXPCAP_FLAG_SWOVFL)){
 
+                if(pkt_ftr->flags & EXPCAP_FLAG_ABRT)
+                    dropped_errors_abrt++;
+
+                if(pkt_ftr->flags & EXPCAP_FLAG_CRPT)
+                    dropped_errors_crpt++;
+
+                if(pkt_ftr->flags & EXPCAP_FLAG_SWOVFL)
+                    dropped_errors_swofl++;
+
+
                 dropped_errors++;
                 ch_log_debug1("Skipping over damaged packet %i (buffer %i) because flags = 0x%02x\n",
                               pkt_idx, buff_idx, pkt_ftr->flags);
@@ -481,16 +501,29 @@ begin_loop:
 
 
         pcap_pkthdr_t* pkt_hdr = rd_buffs[min_idx].pkt;
-        const int64_t packet_copy_bytes = MIN(options.snaplen, (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t));
+        const int64_t packet_len = (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t);
+
+        /* TODO add more comprehensive filtering in here */
+        char* pkt_data = (char *)(pkt_hdr + 1);
+
+        fusion_hpt_trailer_t* hpt_trailer = (fusion_hpt_trailer_t *)((pkt_data + packet_len) - sizeof(fusion_hpt_trailer_t));
+
+        const bool extract_hpt = options.hpt_device > -1 || options.hpt_port > -1;
+        if(extract_hpt){
+            if((options.hpt_device > -1 && options.hpt_device != hpt_trailer->device_id) ||
+               (options.hpt_port > -1 && options.hpt_port !=  hpt_trailer->port)) {
+                goto next_packet;
+            }
+        }
+
+        /* HPT trailers will be stripped in the final capture, original FCS is kept */
+        const int64_t packet_copy_bytes = MIN(options.snaplen, packet_len - ((extract_hpt) ? sizeof(fusion_hpt_trailer_t) - 4 : 0));
         const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes + sizeof(expcap_pktftr_t);
 
         ch_log_debug1("header bytes=%li\n", sizeof(pcap_pkthdr_t));
         ch_log_debug1("packet_bytes=%li\n", packet_copy_bytes);
         ch_log_debug1("footer bytes=%li\n", sizeof(expcap_pktftr_t));
         ch_log_debug1("max pcap_record_bytes=%li\n", pcap_record_bytes);
-
-
-        /* TODO add more comprehensive filtering in here */
 
         ch_log_debug1("Buffer offset=%li, write_buff_size=%li, delta=%li\n",
                       wr_buff.offset, WRITE_BUFF_SIZE,
@@ -500,10 +533,8 @@ begin_loop:
         const bool file_full = options.max_file > 0 &&
                  (file_bytes_written + pcap_record_bytes) > options.max_file ;
 
-
         if(file_full || wr_buff.offset + pcap_record_bytes > WRITE_BUFF_SIZE)
         {
-
             flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
 
             if(file_full){
@@ -518,25 +549,35 @@ begin_loop:
 
         /* Copy the packet header, and upto snap len packet data bytes */
         const int64_t copy_bytes =  sizeof(pcap_pkthdr_t) + packet_copy_bytes;
+
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", copy_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
         memcpy(wr_buff.data + wr_buff.offset, pkt_hdr, copy_bytes);
         packets_total++;
 
         /* Update the packet header in case snaplen is less than the original capture */
         pcap_pkthdr_t* wr_pkt_hdr = (pcap_pkthdr_t*)(wr_buff.data + wr_buff.offset);
+        /* Update the wire length as HPT trailer may be stripped */
+        wr_pkt_hdr->len = packet_copy_bytes;
         wr_pkt_hdr->caplen = packet_copy_bytes;
 
+        double hpt_frac = 0;
+        uint64_t hpt_psecs = 0;
+        uint64_t hpt_secs = 0;
+        if (extract_hpt) {
+            hpt_frac = ldexp((double)be40toh(hpt_trailer->frac_seconds), -40);
+            hpt_psecs = hpt_frac * 1000 * 1000 * 1000 * 1000;
+            hpt_secs = be32toh(hpt_trailer->seconds_since_epoch);
+        }
 
         /* Extract the timestamp from the footer */
         expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(pkt_hdr + 1)
                 + pkt_hdr->caplen - sizeof(expcap_pktftr_t));
-        const uint64_t secs          = pkt_ftr->ts_secs;
-        const uint64_t psecs         = pkt_ftr->ts_psecs;
+        const uint64_t secs          = (extract_hpt) ? hpt_secs : pkt_ftr->ts_secs;
+        const uint64_t psecs         = (extract_hpt) ? hpt_psecs : pkt_ftr->ts_psecs;
         const uint64_t psecs_mod1000 = psecs % 1000;
         const uint64_t psecs_floor   = psecs - psecs_mod1000;
         const uint64_t psecs_rounded = psecs_mod1000 >= 500 ? psecs_floor + 1000 : psecs_floor ;
         const uint64_t nsecs         = psecs_rounded / 1000;
-
 
         wr_pkt_hdr->ts.ns.ts_sec  = secs;
         wr_pkt_hdr->ts.ns.ts_nsec = nsecs;
@@ -547,7 +588,10 @@ begin_loop:
         /* Include the footer (if we want it) */
         if(format == EXTR_OPT_FORM_EXPCAP)
         {
-            memcpy(wr_buff.data + wr_buff.offset, pkt_ftr, sizeof(expcap_pktftr_t));
+            expcap_pktftr_t wr_pkt_ftr = *pkt_ftr;
+            wr_pkt_ftr.ts_secs = secs;
+            wr_pkt_ftr.ts_psecs = psecs;
+            memcpy(wr_buff.data + wr_buff.offset, &wr_pkt_ftr, sizeof(expcap_pktftr_t));
             wr_buff.offset     += sizeof(expcap_pktftr_t);
             file_bytes_written += sizeof(expcap_pktftr_t);
             wr_pkt_hdr->caplen += sizeof(expcap_pktftr_t);
@@ -557,13 +601,17 @@ begin_loop:
         if(options.max_count && count >= options.max_count){
             break;
         }
+
+
+
+    next_packet:
        /* Increment packet pointer to look at the next packet */
+
+
        next_packet(&rd_buffs[min_idx]);
-
-
     }
 
-    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
+    ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li (%li, %li, %li), Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_errors_abrt, dropped_errors_crpt, dropped_errors_swofl, dropped_padding);
     flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
     close(wr_buff.fd);
 
