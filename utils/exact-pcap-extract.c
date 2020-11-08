@@ -446,7 +446,7 @@ begin_loop:
                 continue;
             }
 
-            if(pkt_hdr->caplen < 46){
+            if(pkt_hdr->caplen < 64){
                 ch_log_debug1("Skipping over runt frame %i (buffer %i) \n",
                               pkt_idx, buff_idx);
                 dropped_runts++;
@@ -549,7 +549,6 @@ begin_loop:
 
         /* Copy the packet header, and upto snap len packet data bytes */
         const int64_t copy_bytes =  sizeof(pcap_pkthdr_t) + packet_copy_bytes;
-
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", copy_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
         memcpy(wr_buff.data + wr_buff.offset, pkt_hdr, copy_bytes);
         packets_total++;
@@ -602,12 +601,8 @@ begin_loop:
             break;
         }
 
-
-
     next_packet:
        /* Increment packet pointer to look at the next packet */
-
-
        next_packet(&rd_buffs[min_idx]);
     }
 
