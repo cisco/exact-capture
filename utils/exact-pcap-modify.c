@@ -1,11 +1,11 @@
 /*
- * Copyright (c) 2017,2018,2019 All rights reserved.
+ * Copyright (c) 2017,2018,2019,2020 All rights reserved.
  * See LICENSE.txt for full details.
  *
- *  Created:     28 Jul 2017
- *  Author:      Matthew P. Grosvenor
- *  Description: A tool for parsing pcaps and expcaps and outputting in ASCII
- *               for debugging and inspection.
+ *  Created:     18 May 2020
+ *  Author:      Matthew J. Sanders
+ *  Description: A tool for filtering andy modifying Ethernet/IP/UDP/TCP header
+ *               values contained in pcaps and expcaps.
  *
  */
 
@@ -290,6 +290,8 @@ static int parse_vlan_opt(char* str, u16* old_vlan, u16* new_vlan)
         new_tag = htobe16(parse_number(tok_new, 0).val_uint);
         *new_vlan = new_tag;
     }
+    /* 0xFFFF is a reserved value. Use it to indicate this a filtering operation,
+       not a strip. */
     else{
         *new_vlan = 0xFFFF;
     }
