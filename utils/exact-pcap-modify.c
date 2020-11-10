@@ -127,7 +127,6 @@ void signal_handler(int signum)
     stop = 1;
 }
 
-
 /* Open a new file for output, as a buff_t */
 void new_file(buff_t* wr_buff, int file_num)
 {
@@ -737,6 +736,7 @@ int main(int argc, char** argv)
                 }
             }
         }
+
         if(is_8021q(wr_vlan_hdr)){
             match_wr_buff.offset += VLAN_HLEN;
         }
@@ -862,7 +862,13 @@ int main(int argc, char** argv)
                 }
                 break;
             }
-        }
+        default:{
+            /* Other protocols not supported, copy remaining bytes as is */
+            const uint64_t bytes_remaining = pkt_hdr->len - (pbuf - pkt_start) - ETH_CRC_LEN;
+            memcpy(match_wr_buff.data + match_wr_buff.offset, pbuf, bytes_remaining);
+            pbuf += bytes_remaining;
+            match_wr_buff.offset += bytes_remaining;
+        }}
 
     calc_eth_crc:
         /* If the packet length has shrunk to < 64B (due to stripping a VLAN tag) */
