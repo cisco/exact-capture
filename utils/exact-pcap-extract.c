@@ -34,7 +34,7 @@
 
 #include "src/data_structs/pcap-structures.h"
 #include "src/data_structs/expcap.h"
-
+#include "src/buff.h"
 
 USE_CH_LOGGER_DEFAULT; //(CH_LOG_LVL_DEBUG3, true, CH_LOG_OUT_STDERR, NULL);
 USE_CH_OPTIONS;
@@ -92,20 +92,6 @@ void signal_handler (int signum)
     lstop = 1;
 }
 
-
-typedef struct {
-    char* filename;
-    char* data;
-    pcap_pkthdr_t* pkt;
-    bool eof;
-    int fd;
-    uint64_t filesize;
-    uint64_t offset;
-    uint64_t pkt_idx;
-} buff_t;
-
-
-
 /* Return packet with earliest timestamp */
 int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, buff_t* buffs)
 {
@@ -151,83 +137,7 @@ int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, buff_t* buffs)
     }
 
     return buff_idx_lhs;
-
 }
-
-/* Open a new file for output, as a buff_t */
-void new_file(buff_t* wr_buff, int file_num)
-{
-    char full_filename[1024] = {0};
-    snprintf(full_filename, 1024, "%s_%i.pcap", wr_buff->filename, file_num);
-
-    ch_log_info("Opening output \"%s\"...\n",full_filename );
-    wr_buff->fd = open(full_filename, O_CREAT | O_TRUNC | O_WRONLY, 0666 );
-    if(wr_buff->fd < 0)
-    {
-        ch_log_fatal("Could not open output file %s: \"%s\"",
-                     full_filename, strerror(errno));
-    }
-
-    /* TODO: Currently assumes PCAP output only, would be nice at add ERF */
-    /* Generate the output file header */
-    pcap_file_header_t hdr;
-    hdr.magic = options.usec ? TCPDUMP_MAGIC: NSEC_TCPDUMP_MAGIC;
-    hdr.version_major = PCAP_VERSION_MAJOR;
-    hdr.version_minor = PCAP_VERSION_MINOR;
-    hdr.thiszone = 0;
-    hdr.sigfigs = 0; /* 9? libpcap always writes 0 */
-    hdr.snaplen = options.snaplen + (ch_word)sizeof(expcap_pktftr_t);
-    hdr.linktype = DLT_EN10MB;
-    ch_log_info("Writing PCAP header to fd=%i\n", wr_buff->fd);
-    if(write(wr_buff->fd,&hdr,sizeof(hdr)) != sizeof(hdr))
-    {
-        ch_log_fatal("Could not write PCAP header"); 
-        /*TDOD: handle this failure more gracefully */
-    }
-
-}
-
-void flush_to_disk(buff_t* wr_buff, int64_t* file_bytes_written, int64_t packets_written)
-{
-    ch_log_info("Flushing %liB to fd=%i total=(%liMB) packets=%li\n", wr_buff->offset, wr_buff->fd, *file_bytes_written / 1024/ 1024, packets_written);
-    /* Not enough space in the buffer, time to flush it */
-    const uint64_t written = write(wr_buff->fd,wr_buff->data,wr_buff->offset);
-    if(written < wr_buff->offset)
-    {
-        ch_log_fatal("Couldn't write all bytes, fix this some time\n");
-    }
-
-    wr_buff->offset = 0;
-
-}
-
-
-void next_packet(buff_t* buff)
-{
-    pcap_pkthdr_t* curr_pkt    = buff->pkt;
-    const int64_t curr_cap_len = curr_pkt->caplen;
-    ch_log_debug1("Skipping %li bytes ahead\n", curr_cap_len);
-    pcap_pkthdr_t* next_pkt    = (pcap_pkthdr_t*)((char*)(curr_pkt+1) + curr_cap_len);
-
-    buff->pkt = next_pkt;
-    buff->pkt_idx++;
-
-    /*Check if we've overflowed */
-    const uint64_t offset = (char*)next_pkt - buff->data;
-    buff->eof = offset >= buff->filesize;
-    if(buff->eof){
-        ch_log_warn("End of file \"%s\"\n", buff->filename);
-    }
-
-}
-
-#define READ_BUFF_SIZE (128 * 1024 * 1024) /* 128MB */
-#define WRITE_BUFF_SIZE (128 * 1024 * 1024) /* 128MB */
-
-
-
-
-
 
 /**
  * Main loop sets up threads and listens for stats / configuration messages.
@@ -261,14 +171,12 @@ int main (int argc, char** argv)
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
 
-
     if(!options.all && (options.port == -1 || options.device == -1))
     {
         ch_log_fatal("Must supply a port and device number (--dev /--port) or use --all\n");
     }
 
-    if(options.reads->count == 0)
-    {
+    if(options.reads->count == 0){
         ch_log_fatal("Please supply input files\n");
     }
 
@@ -276,64 +184,31 @@ int main (int argc, char** argv)
 
     /* Parse the format type */
     enum out_format_type format = EXTR_OPT_FORM_UNKNOWN;
-    for(int i = 0; i < OUT_FORMATS_COUNT; i++ )
-        if(strncmp(options.format, out_formats[i].cmdline, strlen(out_formats[i].cmdline))== 0 )
-        {
+    for(int i = 0; i < OUT_FORMATS_COUNT; i++ ){
+        if(strncmp(options.format, out_formats[i].cmdline, strlen(out_formats[i].cmdline))== 0 ){
             format = out_formats[i].type;
         }
+    }
 
-    if(format == EXTR_OPT_FORM_UNKNOWN)
-    {
+    if(format == EXTR_OPT_FORM_UNKNOWN){
         ch_log_fatal("Unknown output format type %s\n", options.format );
     }
 
-    buff_t wr_buff = {0};
-    wr_buff.data = calloc(1, WRITE_BUFF_SIZE);
-    if(!wr_buff.data)
-    {
-        ch_log_fatal("Could not allocate memory for write buffer\n");
+    buff_t wr_buff;
+    if(init_buff(options.write, &wr_buff, options.snaplen, options.max_file, options.usec) != 0){
+        ch_log_fatal("Failed to initialize write buffer!\n");
     }
-    wr_buff.filename = options.write;
-
 
     /* Allocate N read buffers where */
     const int64_t rd_buffs_count = options.reads->count;
     buff_t* rd_buffs = (buff_t*)calloc(rd_buffs_count, sizeof(buff_t));
-    if(!rd_buffs)
-    {
+    if(!rd_buffs){
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
-    for(int i = 0; i < rd_buffs_count; i++)
-    {
-        rd_buffs[i].filename = options.reads->first[i];
-        ch_log_debug1("Opening input %s...\n",rd_buffs[i].filename );
-        rd_buffs[i].fd = open(rd_buffs[i].filename,O_RDONLY);
-        if(!rd_buffs[i].fd)
-        {
-            ch_log_fatal("Could not open input file %s: \"%s\"",
-                         rd_buffs[i].filename, strerror(errno));
+    for(int i = 0; i < rd_buffs_count; i++){
+        if(read_file(&rd_buffs[i], options.reads->first[i]) != 0){
+            ch_log_fatal("Failed to read %s into buff_t!\n", options.reads->first[i]);
         }
-
-        struct stat st = {0};
-        if(stat(rd_buffs[i].filename, &st))
-        {
-            ch_log_fatal("Could not stat file %s: \"%s\"\n",
-                         rd_buffs[i].filename, strerror(errno));
-        }
-        rd_buffs[i].filesize = st.st_size;
-
-
-        rd_buffs[i].data = mmap(NULL, rd_buffs[i].filesize,
-                                  PROT_READ,
-                                  MAP_PRIVATE , //| MAP_POPULATE ,
-                                  rd_buffs[i].fd, 0);
-        ch_log_debug1("File mapped at %p\n", rd_buffs[i].data);
-        if(rd_buffs[i].data == MAP_FAILED)
-        {
-            ch_log_fatal("Could not map input file %s: \"%s\"\n",
-                             rd_buffs[i].filename, strerror(errno));
-        }
-
     }
 
     ch_log_info("starting main loop with %li buffers\n", rd_buffs_count);
@@ -344,17 +219,15 @@ int main (int argc, char** argv)
 
 
     /* Skip over the PCAP headers in each file */
-    for(int i = 0; i < rd_buffs_count; i++)
-    {
+    for(int i = 0; i < rd_buffs_count; i++){
         rd_buffs[i].pkt = (pcap_pkthdr_t*)(rd_buffs[i].data + sizeof(pcap_file_header_t));
     }
 
-
     /* Process the merge */
     ch_log_info("Beginning merge\n");
-    int64_t file_bytes_written = 0;
-    int64_t file_seg = 0;
-    new_file(&wr_buff, file_seg);
+    if(new_file(&wr_buff) != 0){
+        ch_log_fatal("Failed to create new file!\n");
+    }
 
     int64_t packets_total   = 0;
     int64_t dropped_padding = 0;
@@ -370,12 +243,10 @@ begin_loop:
         /* Check all the FD in case we've read everything  */
         ch_log_debug1("Checking for EOF\n");
         bool all_eof = true;
-        for(int i = 0; i < rd_buffs_count; i++)
-        {
+        for(int i = 0; i < rd_buffs_count; i++){
            all_eof &= rd_buffs[i].eof;
         }
-        if(all_eof)
-        {
+        if(all_eof){
             ch_log_info("All files empty, exiting now\n");
             break;
         }
@@ -387,8 +258,7 @@ begin_loop:
         int64_t min_idx          = 0;
 
 
-        for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ )
-        {
+        for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
             if(rd_buffs[buff_idx].eof){
                 if(min_idx == buff_idx){
                     min_idx = buff_idx+1;
@@ -421,8 +291,6 @@ begin_loop:
                 rd_buffs[buff_idx].eof = 1;
                 goto begin_loop;
             }
-
-
 
             if(!options.all && (pkt_ftr->port_id != options.port || pkt_ftr->dev_id != options.device)){
                 ch_log_debug1("Skipping over packet %i (buffer %i) because port %li != %lu or %li != %lu\n",
@@ -474,13 +342,12 @@ begin_loop:
                 continue;
             }
 
-
             min_idx = min_packet_ts(min_idx, buff_idx, rd_buffs);
             ch_log_debug1("Minimum timestamp index is %i \n", min_idx);
         }
 
-
         pcap_pkthdr_t* pkt_hdr = rd_buffs[min_idx].pkt;
+        pcap_pkthdr_t* wr_pkt_hdr = (pcap_pkthdr_t*)(wr_buff.data + wr_buff.offset);
         const int64_t packet_copy_bytes = MIN(options.snaplen, (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t));
         const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes + sizeof(expcap_pktftr_t);
 
@@ -489,7 +356,6 @@ begin_loop:
         ch_log_debug1("footer bytes=%li\n", sizeof(expcap_pktftr_t));
         ch_log_debug1("max pcap_record_bytes=%li\n", pcap_record_bytes);
 
-
         /* TODO add more comprehensive filtering in here */
 
         ch_log_debug1("Buffer offset=%li, write_buff_size=%li, delta=%li\n",
@@ -497,35 +363,32 @@ begin_loop:
                       WRITE_BUFF_SIZE - wr_buff.offset);
 
         /* Flush the buffer if we need to */
-        const bool file_full = options.max_file > 0 &&
-                 (file_bytes_written + pcap_record_bytes) > options.max_file ;
+        const bool file_full = buff_remaining(&wr_buff) < pcap_record_bytes ;
 
-
-        if(file_full || wr_buff.offset + pcap_record_bytes > WRITE_BUFF_SIZE)
+        if(file_full)
         {
+            if(flush_to_disk(&wr_buff) != 0){
+                ch_log_fatal("Failed to flush buffer to disk\n");
+            }
 
-            flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
-
-            if(file_full){
-                    ch_log_info("File is full. Closing\n");
-                    close(wr_buff.fd);
-                    file_seg++;
-                    file_bytes_written = 0;
-                    new_file(&wr_buff, file_seg);
+            ch_log_info("File is full. Closing\n");
+            wr_buff.file_seg++;
+            if(new_file(&wr_buff) != 0){
+                ch_log_fatal("Failed to create new file: %s\n", wr_buff.filename);
             }
         }
 
-
         /* Copy the packet header, and upto snap len packet data bytes */
-        const int64_t copy_bytes =  sizeof(pcap_pkthdr_t) + packet_copy_bytes;
+        const int64_t copy_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes;
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", copy_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
-        memcpy(wr_buff.data + wr_buff.offset, pkt_hdr, copy_bytes);
-        packets_total++;
+
+        if(buff_copy_bytes(&wr_buff, pkt_hdr, copy_bytes) != 0){
+            ch_log_fatal("Failed to copy packet data to wr_buff\n");
+        }
 
         /* Update the packet header in case snaplen is less than the original capture */
-        pcap_pkthdr_t* wr_pkt_hdr = (pcap_pkthdr_t*)(wr_buff.data + wr_buff.offset);
         wr_pkt_hdr->caplen = packet_copy_bytes;
-
+        packets_total++;
 
         /* Extract the timestamp from the footer */
         expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(pkt_hdr + 1)
@@ -537,19 +400,14 @@ begin_loop:
         const uint64_t psecs_rounded = psecs_mod1000 >= 500 ? psecs_floor + 1000 : psecs_floor ;
         const uint64_t nsecs         = psecs_rounded / 1000;
 
-
         wr_pkt_hdr->ts.ns.ts_sec  = secs;
         wr_pkt_hdr->ts.ns.ts_nsec = nsecs;
 
-        wr_buff.offset += copy_bytes;
-        file_bytes_written += copy_bytes;
-
         /* Include the footer (if we want it) */
-        if(format == EXTR_OPT_FORM_EXPCAP)
-        {
-            memcpy(wr_buff.data + wr_buff.offset, pkt_ftr, sizeof(expcap_pktftr_t));
-            wr_buff.offset     += sizeof(expcap_pktftr_t);
-            file_bytes_written += sizeof(expcap_pktftr_t);
+        if(format == EXTR_OPT_FORM_EXPCAP){
+            if(buff_copy_bytes(&wr_buff, pkt_ftr, sizeof(expcap_pktftr_t)) != 0){
+                ch_log_fatal("Failed to copy packet footer to wr_buff\n");
+            }
             wr_pkt_hdr->caplen += sizeof(expcap_pktftr_t);
         }
 
@@ -557,17 +415,16 @@ begin_loop:
         if(options.max_count && count >= options.max_count){
             break;
         }
+
        /* Increment packet pointer to look at the next packet */
        next_packet(&rd_buffs[min_idx]);
-
-
     }
 
     ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
-    flush_to_disk(&wr_buff, &file_bytes_written, packets_total);
+    if(flush_to_disk(&wr_buff) != 0){
+        ch_log_fatal("Failed to flush buffer to disk\n");
+    }
     close(wr_buff.fd);
-
-
 
     return 0;
 }

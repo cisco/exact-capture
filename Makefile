@@ -8,7 +8,7 @@ ASSERT_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -O3 -Wall -DNDEBUG
 DEBUG_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -Werror -Wall -Wextra -pedantic
 BIN=bin/exact-capture bin/exact-pcap-extract bin/exact-pcap-parse bin/exact-pcap-match
 
-EXACTCAP_SRCS=$(wildcard src/*.c) $(wildcard src/**/*.c)   
+EXACTCAP_SRCS=$(wildcard src/*.c) $(wildcard src/**/*.c)
 EXACTCAP_HDRS=$(wildcard src/*.h) $(wildcard src/**/*.h) 
 LIBCHASTE_HDRS=$(wildcard libs/chaste/*.h) $(wildcard libs/chaste/**/*.h) 
 
@@ -34,7 +34,7 @@ bin/exact-pcap-match: utils/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS
 	$(CC) $(CFLAGS) utils/exact-pcap-match.c $(LDFLAGS) -o $@ 
 
 bin/exact-pcap-extract: utils/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
-	$(CC) $(CFLAGS) utils/exact-pcap-extract.c $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) src/buff.c utils/exact-pcap-extract.c $(LDFLAGS) -o $@
 
 install: all
 	install -d $(PREFIX)/bin
