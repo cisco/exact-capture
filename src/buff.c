@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
@@ -85,6 +86,7 @@ int read_file(buff_t* buff, char* filename)
                 buff->filename, strerror(errno));
         return 1;
     }
+    buff->pkt = (pcap_pkthdr_t*)(buff->data + sizeof(pcap_file_header_t));
     return 0;
 }
 
