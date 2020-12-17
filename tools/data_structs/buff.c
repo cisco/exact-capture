@@ -10,6 +10,7 @@
 
 #include <chaste/types/types.h>
 #include <chaste/log/log.h>
+#include <chaste/utils/util.h>
 
 #include "buff.h"
 #include "data_structs/expcap.h"
@@ -111,6 +112,7 @@ buff_error_t flush_to_disk(buff_t* buff)
         return BUFF_EOPEN;
     }
 
+    const uint64_t written = write(buff->fd, buff->data, buff->offset);
     if(written != buff->offset){
         ch_log_warn("Couldn't write all bytes: %s \n", strerror(errno));
         return BUFF_EWRITE;
@@ -175,7 +177,7 @@ buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
     }
 
     /* This should never happen... better safe than sorry. */
-    if(buff->offset > BUFF_SIZE){
+    ifunlikely(buff->offset > BUFF_SIZE){
         return BUFF_EOVERFLOW;
     }
 
