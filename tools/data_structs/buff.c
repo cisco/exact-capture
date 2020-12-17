@@ -59,7 +59,10 @@ buff_error_t new_file(buff_t* buff)
         ch_log_warn("Could not write PCAP header");
         return BUFF_EWRITE;
     }
-    close(buff->fd);
+
+    if(!buff->conserve_fds){
+        close(buff->fd);
+    }
     return BUFF_ENONE;
 }
 
@@ -100,13 +103,14 @@ buff_error_t flush_to_disk(buff_t* buff)
     /* open fd */
     char full_filename[1024] = {0};
     snprintf(full_filename, 1024, "%s_%i.pcap", buff->filename, buff->file_seg);
-    buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
+    if(!buff->conserve_fds){
+        buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
+    }
     if (buff->fd == -1){
         ch_log_warn("Failed to append to output: %s\n", strerror(errno));
         return BUFF_EOPEN;
     }
 
-    const uint64_t written = write(buff->fd,buff->data,buff->offset);
     if(written != buff->offset){
         ch_log_warn("Couldn't write all bytes: %s \n", strerror(errno));
         return BUFF_EWRITE;
@@ -114,7 +118,9 @@ buff_error_t flush_to_disk(buff_t* buff)
 
     buff->file_bytes_written += written;
     buff->offset = 0;
-    close(buff->fd);
+    if(!buff->conserve_fds){
+        close(buff->fd);
+    }
     return BUFF_ENONE;
 }
 

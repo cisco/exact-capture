@@ -1,3 +1,4 @@
+#include <chaste/types/types.h>
 #include "data_structs/pcap-structures.h"
 
 #define BUFF_SIZE (128 * 1024 * 1024) /* 128MB */
@@ -9,7 +10,8 @@ typedef struct {
     pcap_pkthdr_t* pkt;
     int eof;
     int fd;
-    int usec;
+    bool usec;
+    bool conserve_fds;
     uint64_t snaplen;
     uint64_t filesize;
     uint64_t max_filesize;
