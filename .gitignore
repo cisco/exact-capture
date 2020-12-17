@@ -59,3 +59,6 @@ bin/*
 .settings/*
 .project
 .cproject
+
+# Emacs temp files
+*~

@@ -34,7 +34,7 @@
 
 #include "src/data_structs/pcap-structures.h"
 #include "src/data_structs/expcap.h"
-#include "src/buff.h"
+#include "tools/data_structs/buff.h"
 
 USE_CH_LOGGER_DEFAULT; //(CH_LOG_LVL_DEBUG3, true, CH_LOG_OUT_STDERR, NULL);
 USE_CH_OPTIONS;
@@ -195,8 +195,10 @@ int main (int argc, char** argv)
     }
 
     buff_t wr_buff;
-    if(init_buff(options.write, &wr_buff, options.snaplen, options.max_file, options.usec) != 0){
-        ch_log_fatal("Failed to initialize write buffer!\n");
+    buff_error_t buff_err;
+    buff_err = init_buff(options.write, &wr_buff, options.snaplen, options.max_file, options.usec);
+    if(buff_err != BUFF_ENONE){
+        ch_log_fatal("Failed to initialize write buffer: %s\n", buff_strerror(buff_err));
     }
 
     /* Allocate N read buffers where */
@@ -206,27 +208,28 @@ int main (int argc, char** argv)
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
     for(int i = 0; i < rd_buffs_count; i++){
-        if(read_file(&rd_buffs[i], options.reads->first[i]) != 0){
-            ch_log_fatal("Failed to read %s into buff_t!\n", options.reads->first[i]);
+        buff_err = read_file(&rd_buffs[i], options.reads->first[i]);
+        if(buff_err != BUFF_ENONE){
+            ch_log_fatal("Failed to read %s into a buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
         }
     }
 
     ch_log_info("starting main loop with %li buffers\n", rd_buffs_count);
 
-
     /* At this point we have read buffers ready for reading data and a write
-     * buffer for outputting and file handles ready to go. Fun starts now*/
+     * buffer for outputting and file handles ready to go. Fun starts now.
+     * Skip over the PCAP headers in each file */
 
-
-    /* Skip over the PCAP headers in each file */
+    /* consider replacing with pkt_buff api... */
     for(int i = 0; i < rd_buffs_count; i++){
         rd_buffs[i].pkt = (pcap_pkthdr_t*)(rd_buffs[i].data + sizeof(pcap_file_header_t));
     }
 
     /* Process the merge */
     ch_log_info("Beginning merge\n");
-    if(new_file(&wr_buff) != 0){
-        ch_log_fatal("Failed to create new file!\n");
+    buff_err = new_file(&wr_buff);
+    if(buff_err != BUFF_ENONE){
+        ch_log_fatal("Failed to create new file for writer buff: %s\n", buff_strerror(buff_err));
     }
 
     int64_t packets_total   = 0;
@@ -363,7 +366,12 @@ begin_loop:
                       WRITE_BUFF_SIZE - wr_buff.offset);
 
         /* Flush the buffer if we need to */
-        const bool file_full = buff_remaining(&wr_buff) < pcap_record_bytes ;
+        uint64_t bytes_remaining;
+        buff_err = buff_remaining(&wr_buff, &bytes_remaining);
+        if(buff_err != BUFF_ENONE){
+            ch_log_fatal("Buffer is in invalid state: %s\n", buff_strerror(buff_err));
+        }
+        const bool file_full = bytes_remaining < pcap_record_bytes;
 
         if(file_full)
         {
@@ -373,8 +381,9 @@ begin_loop:
 
             ch_log_info("File is full. Closing\n");
             wr_buff.file_seg++;
-            if(new_file(&wr_buff) != 0){
-                ch_log_fatal("Failed to create new file: %s\n", wr_buff.filename);
+            buff_err = new_file(&wr_buff);
+            if(buff_err != BUFF_ENONE){
+                ch_log_fatal("Failed to create new file: %s, %s\n", wr_buff.filename, buff_strerror(buff_err));
             }
         }
 
@@ -382,8 +391,9 @@ begin_loop:
         const int64_t copy_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes;
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", copy_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
 
-        if(buff_copy_bytes(&wr_buff, pkt_hdr, copy_bytes) != 0){
-            ch_log_fatal("Failed to copy packet data to wr_buff\n");
+        buff_err = buff_copy_bytes(&wr_buff, pkt_hdr, copy_bytes);
+        if(buff_err != BUFF_ENONE){
+            ch_log_fatal("Failed to copy packet data to wr_buff: %s\n", buff_strerror(buff_err));
         }
 
         /* Update the packet header in case snaplen is less than the original capture */
@@ -405,8 +415,9 @@ begin_loop:
 
         /* Include the footer (if we want it) */
         if(format == EXTR_OPT_FORM_EXPCAP){
-            if(buff_copy_bytes(&wr_buff, pkt_ftr, sizeof(expcap_pktftr_t)) != 0){
-                ch_log_fatal("Failed to copy packet footer to wr_buff\n");
+            buff_err = buff_copy_bytes(&wr_buff, pkt_ftr, sizeof(expcap_pktftr_t));
+            if(buff_err != BUFF_ENONE){
+                ch_log_fatal("Failed to copy packet footer to wr_buff: %s\n", buff_strerror(buff_err));
             }
             wr_pkt_hdr->caplen += sizeof(expcap_pktftr_t);
         }
@@ -421,8 +432,9 @@ begin_loop:
     }
 
     ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
-    if(flush_to_disk(&wr_buff) != 0){
-        ch_log_fatal("Failed to flush buffer to disk\n");
+    buff_err = flush_to_disk(&wr_buff);
+    if(buff_err != BUFF_ENONE){
+        ch_log_fatal("Failed to flush buffer to disk: %s\n", buff_strerror(buff_err));
     }
     close(wr_buff.fd);
 
