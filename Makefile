@@ -11,7 +11,11 @@ BIN=bin/exact-capture bin/exact-pcap-extract bin/exact-pcap-parse bin/exact-pcap
 EXACTCAP_SRCS=$(wildcard src/*.c) $(wildcard src/**/*.c)
 EXACTCAP_HDRS=$(wildcard src/*.h) $(wildcard src/**/*.h) 
 LIBCHASTE_HDRS=$(wildcard libs/chaste/*.h) $(wildcard libs/chaste/**/*.h) 
-BUFF_SRC=tools/data_structs/buff.c
+BUFF_SRC=tools/data_structs/buff.c tools/data_structs/pkt_buff.c
+BUFF_HDRS=tools/data_structs/buff.h tools/data_structs/pkt_buff.h
+
+all: CFLAGS = $(RELEASE_CFLAGS)
+all: $(BIN)
 
 all: CFLAGS = $(RELEASE_CFLAGS)
 all: $(BIN)
@@ -34,8 +38,8 @@ bin/exact-pcap-match: tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS
 	mkdir -p bin
 	$(CC) $(CFLAGS) tools/exact-pcap-match.c $(LDFLAGS) -o $@
 
-bin/exact-pcap-extract: $(BUFF_SRC) tools/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
-	$(CC) $(CFLAGS) $(BUFF_SRC) tools/exact-pcap-extract.c $(LDFLAGS) -o $@
+bin/exact-pcap-extract: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
+	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(LDFLAGS) -o $@
 
 install: all
 	install -d $(PREFIX)/bin

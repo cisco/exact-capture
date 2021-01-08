@@ -15,27 +15,28 @@
 #include "buff.h"
 #include "data_structs/expcap.h"
 
-buff_error_t init_buff(char* filename, buff_t* buff, uint64_t snaplen, uint64_t max_filesize, bool usec)
+buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize)
 {
-    memset(buff, 0, sizeof(buff_t));
-    buff->data = calloc(1, BUFF_SIZE);
-    if(!buff->data){
-        ch_log_warn("Could not allocate memory for buffer!\n");
+    buff_t* new_buff;
+    new_buff = (buff_t*)calloc(1, sizeof(buff_t));
+    if(!new_buff){
         return BUFF_EALLOC;
     }
-    buff->usec = usec;
-    buff->snaplen = snaplen;
-    buff->max_filesize = max_filesize;
-    buff->filename = filename;
+    new_buff->data = calloc(1, BUFF_SIZE);
+    if(!new_buff->data){
+        return BUFF_EALLOC;
+    }
+    new_buff->filename = filename;
+    new_buff->max_filesize = max_filesize;
+    *buff = new_buff;
     return BUFF_ENONE;
 }
 
 /* Open a new file for output, as a buff_t */
-buff_error_t new_file(buff_t* buff)
+buff_error_t buff_new_file(buff_t* buff)
 {
-    char full_filename[2048] = {0};
-    snprintf(full_filename, 2048, "%s_%i.pcap", buff->filename, buff->file_seg);
-
+    char full_filename[MAX_FILENAME] = {0};
+    buff_get_full_filename(buff, full_filename);
     ch_log_info("Opening output \"%s\"...\n",full_filename);
     buff->fd = open(full_filename, O_CREAT | O_TRUNC | O_WRONLY, 0666 );
     if(buff->fd < 0)
@@ -45,66 +46,91 @@ buff_error_t new_file(buff_t* buff)
         return BUFF_EOPEN;
     }
 
-    /* TODO: Currently assumes PCAP output only, would be nice at add ERF */
-    /* Generate the output file header */
-    pcap_file_header_t hdr;
-    hdr.magic = buff->usec ? TCPDUMP_MAGIC: NSEC_TCPDUMP_MAGIC;
-    hdr.version_major = PCAP_VERSION_MAJOR;
-    hdr.version_minor = PCAP_VERSION_MINOR;
-    hdr.thiszone = 0;
-    hdr.sigfigs = 0; /* 9? libpcap always writes 0 */
-    hdr.snaplen = buff->snaplen + (int)sizeof(expcap_pktftr_t);
-    hdr.linktype = DLT_EN10MB;
-    ch_log_info("Writing PCAP header to fd=%i\n", buff->fd);
-    if(write(buff->fd,&hdr,sizeof(hdr)) != sizeof(hdr)){
-        ch_log_warn("Could not write PCAP header");
+    if(buff->conserve_fds){
+        close(buff->fd);
+        buff->fd = 0;
+    }
+
+    if(buff->file_header){
+        buff_write_file_header(buff);
+    }
+    return BUFF_ENONE;
+}
+
+buff_error_t buff_write_file_header(buff_t* buff)
+{
+    if(buff->offset > 0)
+    {
+        ch_log_warn("Writing file header into data section of buff_t!\n");
+    }
+
+    if(buff->conserve_fds){
+        char full_filename[MAX_FILENAME] = {0};
+        buff_get_full_filename(buff, full_filename);
+        buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
+        if(buff->fd < 0)
+        {
+            ch_log_warn("Could not open output file %s: \"%s\"\n",
+                        full_filename, strerror(errno));
+            return BUFF_EOPEN;
+        }
+    }
+    ch_log_info("Writing file header to fd=%i\n", buff->fd);
+
+    if(write(buff->fd,buff->file_header,buff->header_size) != buff->header_size){
+        ch_log_warn("Could not write file header: %s\n", strerror(errno));
         return BUFF_EWRITE;
     }
 
-    if(!buff->conserve_fds){
+    if(buff->conserve_fds){
         close(buff->fd);
     }
     return BUFF_ENONE;
 }
 
-buff_error_t read_file(buff_t* buff, char* filename)
+buff_error_t buff_init_from_file(buff_t** buff, char* filename)
 {
-    buff->filename = filename;
-    buff->fd = open(buff->filename,O_RDONLY);
-    if(!buff->fd){
+    buff_t* new_buff = (buff_t*)calloc(1, sizeof(buff_t));
+    if(!new_buff){
+        ch_log_fatal("Failed to allocate memory for buff_t\n");
+    }
+    new_buff->filename = filename;
+    new_buff->fd = open(new_buff->filename,O_RDONLY);
+    if(!new_buff->fd){
         ch_log_warn("Could not open input file %s: \"%s\"",
-                    buff->filename, strerror(errno));
+                    new_buff->filename, strerror(errno));
         return BUFF_EOPEN;
     }
 
     struct stat st = {0};
-    if(stat(buff->filename, &st)){
+    if(stat(new_buff->filename, &st)){
         ch_log_warn("Could not stat file %s: \"%s\"\n",
-                    buff->filename, strerror(errno));
+                    new_buff->filename, strerror(errno));
         return BUFF_ESTAT;
     }
-    buff->filesize = st.st_size;
-    buff->data = mmap(NULL, buff->filesize,
-                            PROT_READ,
-                            MAP_PRIVATE , //| MAP_POPULATE ,
-                            buff->fd, 0);
-    if(buff->data == MAP_FAILED){
+    new_buff->filesize = st.st_size;
+    new_buff->data = mmap(NULL, new_buff->filesize,
+                          PROT_READ,
+                          MAP_PRIVATE , //| MAP_POPULATE ,
+                          new_buff->fd, 0);
+    if(new_buff->data == MAP_FAILED){
         ch_log_warn("Could not map input file %s: \"%s\"\n",
-                    buff->filename, strerror(errno));
+                    new_buff->filename, strerror(errno));
         return BUFF_EMMAP;
     }
 
-    buff->pkt = (pcap_pkthdr_t*)(buff->data + sizeof(pcap_file_header_t));
+    *buff = new_buff;
     return BUFF_ENONE;
 }
 
 /* Flush a buff_t to disk */
-buff_error_t flush_to_disk(buff_t* buff)
+buff_error_t buff_flush_to_disk(buff_t* buff)
 {
     /* open fd */
-    char full_filename[1024] = {0};
-    snprintf(full_filename, 1024, "%s_%i.pcap", buff->filename, buff->file_seg);
-    if(!buff->conserve_fds){
+    char full_filename[MAX_FILENAME] = {0};
+    buff_get_full_filename(buff, full_filename);
+
+    if(buff->conserve_fds){
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
     }
     if (buff->fd == -1){
@@ -120,28 +146,11 @@ buff_error_t flush_to_disk(buff_t* buff)
 
     buff->file_bytes_written += written;
     buff->offset = 0;
-    if(!buff->conserve_fds){
+    buff->file_seg++;
+    if(buff->conserve_fds){
         close(buff->fd);
     }
     return BUFF_ENONE;
-}
-
-
-void next_packet(buff_t* buff)
-{
-    pcap_pkthdr_t* curr_pkt    = buff->pkt;
-    const int64_t curr_cap_len = curr_pkt->caplen;
-    pcap_pkthdr_t* next_pkt    = (pcap_pkthdr_t*)((char*)(curr_pkt+1) + curr_cap_len);
-
-    buff->pkt = next_pkt;
-    buff->pkt_idx++;
-
-    /*Check if we've overflowed */
-    const uint64_t offset = (char*)next_pkt - buff->data;
-    buff->eof = offset >= buff->filesize;
-    if(buff->eof){
-        ch_log_warn("End of file \"%s\"\n", buff->filename);
-    }
 }
 
 buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
@@ -150,12 +159,12 @@ buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
     buff_error_t err = BUFF_ENONE;
     err = buff_remaining(buff, &remaining);
     if(err == BUFF_ENONE && remaining <= len){
-        err = flush_to_disk(buff);
+        err = buff_flush_to_disk(buff);
         if(err != BUFF_ENONE){
             ch_log_warn("Failed to copy bytes to buff: %s\n", buff_strerror(err));
             return BUFF_ECOPY;
         }
-        err = new_file(buff);
+        err = buff_new_file(buff);
         if(err != BUFF_ENONE){
             ch_log_warn("Failed to create a new file for buff: %s\n", buff_strerror(err));
             return err;
@@ -164,6 +173,7 @@ buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
 
     memcpy(buff->data + buff->offset, bytes, len);
     buff->offset += len;
+
     return err;
 }
 
@@ -173,7 +183,9 @@ buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
         if(buff->offset > buff->max_filesize){
             return BUFF_EOVERFLOW;
         }
-        return buff->max_filesize - buff->offset;
+
+        *remaining = buff->max_filesize - buff->offset;
+        return BUFF_ENONE;
     }
 
     /* This should never happen... better safe than sorry. */
@@ -183,6 +195,11 @@ buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
 
     *remaining = BUFF_SIZE - buff->offset;
     return BUFF_ENONE;
+}
+
+void buff_get_full_filename(buff_t* buff, char* full_filename)
+{
+    snprintf(full_filename, 2048, "%s_%i.pcap", buff->filename, buff->file_seg);
 }
 
 const char* buff_errlist[] = {

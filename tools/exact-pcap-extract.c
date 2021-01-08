@@ -34,7 +34,7 @@
 
 #include "src/data_structs/pcap-structures.h"
 #include "src/data_structs/expcap.h"
-#include "tools/data_structs/buff.h"
+#include "tools/data_structs/pkt_buff.h"
 
 USE_CH_LOGGER_DEFAULT; //(CH_LOG_LVL_DEBUG3, true, CH_LOG_OUT_STDERR, NULL);
 USE_CH_OPTIONS;
@@ -93,12 +93,12 @@ void signal_handler (int signum)
 }
 
 /* Return packet with earliest timestamp */
-int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, buff_t* buffs)
+int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pkt_buff_t* buffs)
 {
     ch_log_debug1("checking minimum pcaksts on %li vs %li at %p\n", buff_idx_lhs, buff_idx_rhs, buffs);
 
-    pcap_pkthdr_t* lhs_hdr = buffs[buff_idx_lhs].pkt;
-    pcap_pkthdr_t* rhs_hdr = buffs[buff_idx_rhs].pkt;
+    pcap_pkthdr_t* lhs_hdr = buffs[buff_idx_lhs].hdr;
+    pcap_pkthdr_t* rhs_hdr = buffs[buff_idx_rhs].hdr;
     //ch_log_info("lhs_hdr=%p, rhs_hdr=%p\n", lhs_hdr, rhs_hdr);
 
 
@@ -194,23 +194,23 @@ int main (int argc, char** argv)
         ch_log_fatal("Unknown output format type %s\n", options.format );
     }
 
-    buff_t wr_buff;
+    pkt_buff_t wr_buff;
     buff_error_t buff_err;
-    buff_err = init_buff(options.write, &wr_buff, options.snaplen, options.max_file, options.usec);
+    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to initialize write buffer: %s\n", buff_strerror(buff_err));
     }
 
     /* Allocate N read buffers where */
     const int64_t rd_buffs_count = options.reads->count;
-    buff_t* rd_buffs = (buff_t*)calloc(rd_buffs_count, sizeof(buff_t));
+    pkt_buff_t* rd_buffs = (pkt_buff_t*)calloc(rd_buffs_count, sizeof(pkt_buff_t));
     if(!rd_buffs){
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
     for(int i = 0; i < rd_buffs_count; i++){
-        buff_err = read_file(&rd_buffs[i], options.reads->first[i]);
+        buff_err = pkt_buff_from_file(&rd_buffs[i], options.reads->first[i]);
         if(buff_err != BUFF_ENONE){
-            ch_log_fatal("Failed to read %s into a buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
+            ch_log_fatal("Failed to read %s into a pkt_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
         }
     }
 
@@ -219,15 +219,8 @@ int main (int argc, char** argv)
     /* At this point we have read buffers ready for reading data and a write
      * buffer for outputting and file handles ready to go. Fun starts now.
      * Skip over the PCAP headers in each file */
-
-    /* consider replacing with pkt_buff api... */
-    for(int i = 0; i < rd_buffs_count; i++){
-        rd_buffs[i].pkt = (pcap_pkthdr_t*)(rd_buffs[i].data + sizeof(pcap_file_header_t));
-    }
-
     /* Process the merge */
     ch_log_info("Beginning merge\n");
-    buff_err = new_file(&wr_buff);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to create new file for writer buff: %s\n", buff_strerror(buff_err));
     }
@@ -236,7 +229,7 @@ int main (int argc, char** argv)
     int64_t dropped_padding = 0;
     int64_t dropped_runts   = 0;
     int64_t dropped_errors  = 0;
-
+    pkt_info_t pkt_info;
     i64 count = 0;
     for(int i = 0; !lstop ; i++)
     {
@@ -247,7 +240,7 @@ begin_loop:
         ch_log_debug1("Checking for EOF\n");
         bool all_eof = true;
         for(int i = 0; i < rd_buffs_count; i++){
-           all_eof &= rd_buffs[i].eof;
+            all_eof &= pkt_buff_eof(&rd_buffs[i]);
         }
         if(all_eof){
             ch_log_info("All files empty, exiting now\n");
@@ -259,146 +252,57 @@ begin_loop:
                       rd_buffs_count);
         /* Find the read buffer with the earliest timestamp */
         int64_t min_idx          = 0;
-
-
         for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
-            if(rd_buffs[buff_idx].eof){
+            // already looking at a packet at this point...?
+            if(pkt_buff_eof(&rd_buffs[buff_idx])){
                 if(min_idx == buff_idx){
                     min_idx = buff_idx+1;
                 }
                 continue;
             }
 
-            pcap_pkthdr_t* pkt_hdr = rd_buffs[buff_idx].pkt;
-#ifndef NDEBUG
-            int64_t pkt_idx  = rd_buffs[buff_idx].pkt_idx;
-#endif
-            if(pkt_hdr->len == 0){
-                /* Skip over this packet, it's a dummy so we don't want it*/
+            pkt_info = pkt_buff_next_packet(&rd_buffs[buff_idx]);
+            switch(pkt_info){
+            case PKT_PADDING:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n",pkt_idx , buff_idx);
                 dropped_padding++;
-                next_packet(&rd_buffs[buff_idx]);
-                if(rd_buffs[buff_idx].eof){
-                    goto begin_loop;
-                }
                 buff_idx--;
                 continue;
-            }
-
-            expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(pkt_hdr + 1)
-                    + pkt_hdr->caplen - sizeof(expcap_pktftr_t));
-
-            const uint64_t offset = (char*)pkt_ftr - rd_buffs[buff_idx].data;
-            if(offset > rd_buffs[buff_idx].filesize){
-                ch_log_warn("End of file \"%s\"\n", rd_buffs[buff_idx].filename);
-                rd_buffs[buff_idx].eof = 1;
-                goto begin_loop;
-            }
-
-            if(!options.all && (pkt_ftr->port_id != options.port || pkt_ftr->dev_id != options.device)){
-                ch_log_debug1("Skipping over packet %i (buffer %i) because port %li != %lu or %li != %lu\n",
-                              pkt_idx, buff_idx, (uint64_t)pkt_ftr->port_id, options.port,
-                              (uint64_t)pkt_ftr->dev_id, options.device);
-                next_packet(&rd_buffs[buff_idx]);
-                if(rd_buffs[buff_idx].eof){
-                    goto begin_loop;
-                }
-                buff_idx--;
-                continue;
-            }
-
-            if(pkt_hdr->caplen < 64){
-                ch_log_debug1("Skipping over runt frame %i (buffer %i) \n",
-                              pkt_idx, buff_idx);
+            case PKT_RUNT:
+                ch_log_debug1("Skipping over runt frame %i (buffer %i) \n", pkt_idx, buff_idx);
                 dropped_runts++;
-                if(options.skip_runts)
-                {
-                    next_packet(&rd_buffs[buff_idx]);
-                    if(rd_buffs[buff_idx].eof)
-                    {
-                        goto begin_loop;
-                    }
+                if(options.skip_runts){
                     buff_idx--;
-
                     continue;
                 }
-            }
-
-
-            if(pkt_ftr->foot.extra.dropped > 0){
-                ch_log_warn("%li packets were droped before this one\n",
-                            pkt_ftr->foot.extra.dropped);
-            }
-
-            if( (pkt_ftr->flags & EXPCAP_FLAG_ABRT) ||
-                (pkt_ftr->flags & EXPCAP_FLAG_CRPT) ||
-                (pkt_ftr->flags & EXPCAP_FLAG_SWOVFL)){
-
-                dropped_errors++;
+                break;
+            case PKT_ERROR:
                 ch_log_debug1("Skipping over damaged packet %i (buffer %i) because flags = 0x%02x\n",
                               pkt_idx, buff_idx, pkt_ftr->flags);
-                next_packet(&rd_buffs[buff_idx]);
-                if(rd_buffs[buff_idx].eof){
-                    goto begin_loop;
-                }
+                dropped_errors++;
                 buff_idx--;
                 continue;
+            case PKT_EOF:
+                ch_log_warn("End of file \"%s\"\n", pkt_buff_get_filename(&rd_buffs[buff_idx]));
+                goto begin_loop;
+                break;
+            case PKT_OK:
+                break;
             }
 
             min_idx = min_packet_ts(min_idx, buff_idx, rd_buffs);
             ch_log_debug1("Minimum timestamp index is %i \n", min_idx);
         }
 
-        pcap_pkthdr_t* pkt_hdr = rd_buffs[min_idx].pkt;
-        pcap_pkthdr_t* wr_pkt_hdr = (pcap_pkthdr_t*)(wr_buff.data + wr_buff.offset);
-        const int64_t packet_copy_bytes = MIN(options.snaplen, (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t));
+        pcap_pkthdr_t* pkt_hdr = rd_buffs[min_idx].hdr;
+        pcap_pkthdr_t wr_pkt_hdr;
+        int64_t packet_copy_bytes = MIN(options.snaplen, (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t));
         const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes + sizeof(expcap_pktftr_t);
 
-        ch_log_debug1("header bytes=%li\n", sizeof(pcap_pkthdr_t));
-        ch_log_debug1("packet_bytes=%li\n", packet_copy_bytes);
-        ch_log_debug1("footer bytes=%li\n", sizeof(expcap_pktftr_t));
-        ch_log_debug1("max pcap_record_bytes=%li\n", pcap_record_bytes);
-
         /* TODO add more comprehensive filtering in here */
-
         ch_log_debug1("Buffer offset=%li, write_buff_size=%li, delta=%li\n",
-                      wr_buff.offset, WRITE_BUFF_SIZE,
-                      WRITE_BUFF_SIZE - wr_buff.offset);
-
-        /* Flush the buffer if we need to */
-        uint64_t bytes_remaining;
-        buff_err = buff_remaining(&wr_buff, &bytes_remaining);
-        if(buff_err != BUFF_ENONE){
-            ch_log_fatal("Buffer is in invalid state: %s\n", buff_strerror(buff_err));
-        }
-        const bool file_full = bytes_remaining < pcap_record_bytes;
-
-        if(file_full)
-        {
-            if(flush_to_disk(&wr_buff) != 0){
-                ch_log_fatal("Failed to flush buffer to disk\n");
-            }
-
-            ch_log_info("File is full. Closing\n");
-            wr_buff.file_seg++;
-            buff_err = new_file(&wr_buff);
-            if(buff_err != BUFF_ENONE){
-                ch_log_fatal("Failed to create new file: %s, %s\n", wr_buff.filename, buff_strerror(buff_err));
-            }
-        }
-
-        /* Copy the packet header, and upto snap len packet data bytes */
-        const int64_t copy_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes;
-        ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", copy_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
-
-        buff_err = buff_copy_bytes(&wr_buff, pkt_hdr, copy_bytes);
-        if(buff_err != BUFF_ENONE){
-            ch_log_fatal("Failed to copy packet data to wr_buff: %s\n", buff_strerror(buff_err));
-        }
-
-        /* Update the packet header in case snaplen is less than the original capture */
-        wr_pkt_hdr->caplen = packet_copy_bytes;
-        packets_total++;
+                      wr_buff._buff.offset, WRITE_BUFF_SIZE,
+                      WRITE_BUFF_SIZE - wr_buff._buff.offset);
 
         /* Extract the timestamp from the footer */
         expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(pkt_hdr + 1)
@@ -410,33 +314,42 @@ begin_loop:
         const uint64_t psecs_rounded = psecs_mod1000 >= 500 ? psecs_floor + 1000 : psecs_floor ;
         const uint64_t nsecs         = psecs_rounded / 1000;
 
-        wr_pkt_hdr->ts.ns.ts_sec  = secs;
-        wr_pkt_hdr->ts.ns.ts_nsec = nsecs;
+        wr_pkt_hdr.len = pkt_hdr->len;
+        wr_pkt_hdr.ts.ns.ts_sec = secs;
+        wr_pkt_hdr.ts.ns.ts_nsec = nsecs;
 
+        /* Update the packet header in case snaplen is less than the original capture */
+        wr_pkt_hdr.caplen = packet_copy_bytes;
+
+        expcap_pktftr_t wr_pkt_ftr;
         /* Include the footer (if we want it) */
         if(format == EXTR_OPT_FORM_EXPCAP){
-            buff_err = buff_copy_bytes(&wr_buff, pkt_ftr, sizeof(expcap_pktftr_t));
-            if(buff_err != BUFF_ENONE){
-                ch_log_fatal("Failed to copy packet footer to wr_buff: %s\n", buff_strerror(buff_err));
-            }
-            wr_pkt_hdr->caplen += sizeof(expcap_pktftr_t);
+            wr_pkt_ftr = *pkt_ftr;
+            wr_pkt_ftr.ts_secs = secs;
+            wr_pkt_ftr.ts_psecs = psecs;
         }
 
+        /* Copy the packet header, and upto snap len packet data bytes */
+        ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", pcap_record_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
+
+        buff_err = pkt_buff_write(&wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
+        if(buff_err != BUFF_ENONE){
+            ch_log_fatal("Failed to write packet data: %s\n", buff_strerror(buff_err));
+        }
+
+        packets_total++;
         count++;
         if(options.max_count && count >= options.max_count){
             break;
         }
-
-       /* Increment packet pointer to look at the next packet */
-       next_packet(&rd_buffs[min_idx]);
     }
 
     ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
-    buff_err = flush_to_disk(&wr_buff);
+
+    buff_err = pkt_buff_flush_to_disk(&wr_buff);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to flush buffer to disk: %s\n", buff_strerror(buff_err));
     }
-    close(wr_buff.fd);
 
     return 0;
 }
