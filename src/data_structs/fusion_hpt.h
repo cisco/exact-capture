@@ -3,7 +3,6 @@
 #define be40toh(x) (be64toh(x) >> 24)
 
 typedef struct fusion_hpt_trailer  {
-    uint32_t orig_fcs;
     uint8_t device_id;
     uint8_t port;
     uint64_t seconds_since_epoch : 32;
