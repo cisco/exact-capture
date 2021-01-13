@@ -1,8 +1,20 @@
+#include <stdio.h>
+
+#include <chaste/log/log.h>
 #include <chaste/types/types.h>
 #include "data_structs/pcap-structures.h"
 
 #define BUFF_SIZE (128 * 1024 * 1024) /* 128MB */
 #define MAX_FILENAME 2048
+
+#define BUFF_TRY(x)                                                          \
+    do {                                                                     \
+        buff_error_t err = (x);                                              \
+        if (err != BUFF_ENONE) {                                             \
+            ch_log_warn("%s failed at %s:%d\n", #x, __FILE__, __LINE__);     \
+            ch_log_fatal("Reason: %s\n", buff_strerror(err));                \
+        }                                                                    \
+    } while(0)                                                               \
 
 typedef struct {
     char* filename;
@@ -18,22 +30,25 @@ typedef struct {
     uint64_t offset;
     uint64_t pkt_idx;
     int file_seg;
+    int file_dup;
     uint64_t file_bytes_written;
+    bool read_only;
 } buff_t;
 
 typedef enum {
     BUFF_ENONE = 0,
-    BUFF_EALLOC,     // Failed to allocate memory for a buff_t
-    BUFF_EOPEN,      // Failed to open a file for read/write
-    BUFF_EWRITE,     // Failed to write out buff_t data
-    BUFF_EMMAP,      // Failed to map a buff_t from a file
-    BUFF_ESTAT,      // Failed to stat a file
-    BUFF_ECOPY,      // Failed to copy bytes to a buff_t
-    BUFF_EOVERFLOW,  // Buffer offset is greater than the allocated buffer size.
+    BUFF_EALLOC,       // Failed to allocate memory for a buff_t
+    BUFF_EOPEN,        // Failed to open a file for read/write
+    BUFF_EWRITE,       // Failed to write out buff_t data
+    BUFF_EMMAP,        // Failed to map a buff_t from a file
+    BUFF_ESTAT,        // Failed to stat a file
+    BUFF_ECOPY,        // Failed to copy bytes to a buff_t
+    BUFF_EOVERFLOW,    // Buffer offset is greater than the allocated buffer size.
+    BUFF_EREADONLY,    // Attempting to write to a read-only buffer.
 } buff_error_t;
 
 /* Allocate and initialize a buff_t. */
-buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize);
+buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, bool conserve_fds);
 
 /* Read a file into a buff_t */
 buff_error_t buff_init_from_file(buff_t** buff, char* filename);

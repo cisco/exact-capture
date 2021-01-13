@@ -7,14 +7,10 @@
 #include <errno.h>
 #include "pkt_buff.h"
 
-buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec)
+buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec, bool conserve_fds)
 {
     buff_t* buff = NULL;
-    buff_error_t err = BUFF_ENONE;
-    err = buff_init(filename, &buff, max_filesize);
-    if(err != BUFF_ENONE){
-        return err;
-    }
+    BUFF_TRY(buff_init(filename, &buff, max_filesize, conserve_fds));
 
     pkt_buff->_buff = buff;
     pkt_buff->snaplen = snaplen;
@@ -25,6 +21,7 @@ buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen
     if(!hdr){
         ch_log_fatal("Failed to allocate memory for file header!\n");
     }
+
     buff->file_header = (char*)hdr;
     buff->header_size = sizeof(pcap_file_header_t);
 
@@ -36,17 +33,15 @@ buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen
     hdr->snaplen = snaplen + (int)sizeof(expcap_pktftr_t);
     hdr->linktype = DLT_EN10MB;
 
-    err = buff_new_file(buff);
-    if(err != BUFF_ENONE){
-        return err;
-    }
+    BUFF_TRY(buff_new_file(buff));
 
-    return err;
+    return BUFF_ENONE;
 }
 
 buff_error_t pkt_buff_from_file(pkt_buff_t* pkt_buff, char* filename)
 {
-    return buff_init_from_file(&pkt_buff->_buff, filename);
+    BUFF_TRY(buff_init_from_file(&pkt_buff->_buff, filename));
+    return BUFF_ENONE;
 }
 
 pkt_info_t pkt_buff_next_packet(pkt_buff_t* pkt_buff)
@@ -115,26 +110,21 @@ buff_error_t pkt_buff_flush_to_disk(pkt_buff_t* pkt_buff){
 
 buff_error_t pkt_buff_write(pkt_buff_t* pkt_buff, pcap_pkthdr_t* hdr, char* data, size_t data_len, expcap_pktftr_t* ftr)
 {
-    buff_error_t err = BUFF_ENONE;
     buff_t* buff = pkt_buff->_buff;
 
     /* Flush the buffer if we need to */
     uint64_t bytes_remaining;
-    err = buff_remaining(buff, &bytes_remaining);
-    if(err != BUFF_ENONE){
-        ch_log_fatal("Buffer is in invalid state: %s\n", buff_strerror(err));
-    }
+    BUFF_TRY(buff_remaining(buff, &bytes_remaining));
 
     const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + data_len + (ftr ? sizeof(expcap_pktftr_t) : 0);
     const bool file_full = bytes_remaining < pcap_record_bytes;
     if(file_full)
     {
-        if(buff_flush_to_disk(buff) != 0){
-            ch_log_fatal("Failed to flush buffer to disk\n");
-        }
+        BUFF_TRY(buff_flush_to_disk(buff));
 
         ch_log_info("File is full. Closing\n");
-        err = buff_new_file(buff);
+
+        buff_error_t err = buff_new_file(buff);
         if(err != BUFF_ENONE){
             ch_log_fatal("Failed to create new file: %s, %s\n", buff->filename, buff_strerror(err));
         }
@@ -149,12 +139,12 @@ buff_error_t pkt_buff_write(pkt_buff_t* pkt_buff, pcap_pkthdr_t* hdr, char* data
     ch_log_debug1("footer bytes=%li\n", sizeof(expcap_pktftr_t));
     ch_log_debug1("max pcap_record_bytes=%li\n", pcap_record_bytes);
 
-    buff_copy_bytes(buff, hdr, sizeof(pcap_pkthdr_t));
-    buff_copy_bytes(buff, data, data_len);
+    BUFF_TRY(buff_copy_bytes(buff, hdr, sizeof(pcap_pkthdr_t)));
+    BUFF_TRY(buff_copy_bytes(buff, data, data_len));
 
     if(ftr){
-        buff_copy_bytes(buff, ftr, sizeof(expcap_pktftr_t));
+        BUFF_TRY(buff_copy_bytes(buff, ftr, sizeof(expcap_pktftr_t)));
     }
 
-    return err;
+    return BUFF_ENONE;
 }

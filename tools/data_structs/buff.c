@@ -7,27 +7,31 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include <chaste/types/types.h>
-#include <chaste/log/log.h>
 #include <chaste/utils/util.h>
 
 #include "buff.h"
 #include "data_structs/expcap.h"
 
-buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize)
+buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, bool conserve_fds)
 {
     buff_t* new_buff;
     new_buff = (buff_t*)calloc(1, sizeof(buff_t));
     if(!new_buff){
         return BUFF_EALLOC;
     }
+
     new_buff->data = calloc(1, BUFF_SIZE);
     if(!new_buff->data){
         return BUFF_EALLOC;
     }
+
     new_buff->filename = filename;
     new_buff->max_filesize = max_filesize;
+    new_buff->conserve_fds = conserve_fds;
+
     *buff = new_buff;
     return BUFF_ENONE;
 }
@@ -37,10 +41,18 @@ buff_error_t buff_new_file(buff_t* buff)
 {
     char full_filename[MAX_FILENAME] = {0};
     buff_get_full_filename(buff, full_filename);
+
+    /* Check for files that already have this filename.
+       If they exist, append _file_dup to the newly created file */
+    while(access(full_filename, F_OK) == 0 && buff->file_dup > -1){
+        buff->file_dup++;
+        buff_get_full_filename(buff, full_filename);
+    }
+
     ch_log_info("Opening output \"%s\"...\n",full_filename);
     buff->fd = open(full_filename, O_CREAT | O_TRUNC | O_WRONLY, 0666 );
-    if(buff->fd < 0)
-    {
+
+    if(buff->fd < 0){
         ch_log_warn("Could not open output file %s: \"%s\"",
                     full_filename, strerror(errno));
         return BUFF_EOPEN;
@@ -52,16 +64,15 @@ buff_error_t buff_new_file(buff_t* buff)
     }
 
     if(buff->file_header){
-        buff_write_file_header(buff);
+        BUFF_TRY(buff_write_file_header(buff));
     }
     return BUFF_ENONE;
 }
 
 buff_error_t buff_write_file_header(buff_t* buff)
 {
-    if(buff->offset > 0)
-    {
-        ch_log_warn("Writing file header into data section of buff_t!\n");
+    if(buff->read_only){
+        return BUFF_EREADONLY;
     }
 
     if(buff->conserve_fds){
@@ -94,6 +105,8 @@ buff_error_t buff_init_from_file(buff_t** buff, char* filename)
     if(!new_buff){
         ch_log_fatal("Failed to allocate memory for buff_t\n");
     }
+
+    new_buff->read_only = true;
     new_buff->filename = filename;
     new_buff->fd = open(new_buff->filename,O_RDONLY);
     if(!new_buff->fd){
@@ -156,25 +169,16 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
 {
     uint64_t remaining;
-    buff_error_t err = BUFF_ENONE;
-    err = buff_remaining(buff, &remaining);
-    if(err == BUFF_ENONE && remaining <= len){
-        err = buff_flush_to_disk(buff);
-        if(err != BUFF_ENONE){
-            ch_log_warn("Failed to copy bytes to buff: %s\n", buff_strerror(err));
-            return BUFF_ECOPY;
-        }
-        err = buff_new_file(buff);
-        if(err != BUFF_ENONE){
-            ch_log_warn("Failed to create a new file for buff: %s\n", buff_strerror(err));
-            return err;
-        }
+
+    BUFF_TRY(buff_remaining(buff, &remaining));
+    if(remaining <= len){
+        BUFF_TRY(buff_flush_to_disk(buff));
+        BUFF_TRY(buff_new_file(buff));;
     }
 
     memcpy(buff->data + buff->offset, bytes, len);
     buff->offset += len;
-
-    return err;
+    return BUFF_ENONE;
 }
 
 buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
@@ -199,7 +203,11 @@ buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
 
 void buff_get_full_filename(buff_t* buff, char* full_filename)
 {
-    snprintf(full_filename, 2048, "%s_%i.pcap", buff->filename, buff->file_seg);
+    if(buff->file_dup == 0){
+        snprintf(full_filename, MAX_FILENAME, "%s_%i.pcap", buff->filename, buff->file_seg);
+    } else {
+        snprintf(full_filename, MAX_FILENAME, "%s_%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
+    }
 }
 
 const char* buff_errlist[] = {
@@ -210,7 +218,8 @@ const char* buff_errlist[] = {
     "Failed to mmap buff_t data from a file",          // BUFF_EMMAP
     "Failed to stat file associated with this buff_t", // BUFF_ESTAT
     "Failed to copy bytes to this buff_t",             // BUFF_ECOPY
-    "Buffer offset is greater than the allowed size"   // BUFF_EOVERFLOW
+    "Buffer offset is greater than the allowed size",  // BUFF_EOVERFLOW
+    "Attempted to write to read-only buff_t"           // BUFF_EREADONLY
 };
 
 const char* buff_strerror(buff_error_t err){

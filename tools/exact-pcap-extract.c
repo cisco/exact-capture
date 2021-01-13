@@ -97,19 +97,16 @@ int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pkt_buff_t* bu
 {
     ch_log_debug1("checking minimum pcaksts on %li vs %li at %p\n", buff_idx_lhs, buff_idx_rhs, buffs);
 
+#ifndef NDEBUG
     pcap_pkthdr_t* lhs_hdr = buffs[buff_idx_lhs].hdr;
     pcap_pkthdr_t* rhs_hdr = buffs[buff_idx_rhs].hdr;
-    //ch_log_info("lhs_hdr=%p, rhs_hdr=%p\n", lhs_hdr, rhs_hdr);
-
-
-#ifndef NDEBUG
     const int64_t lhs_caplen = lhs_hdr->caplen;
     const int64_t rhs_caplen = rhs_hdr->caplen;
     ch_log_debug1("lhr_caplen=%li, rhs_caplen=%li\n", lhs_caplen, rhs_caplen);
 #endif
 
-    expcap_pktftr_t* lhs_ftr = (expcap_pktftr_t*)((char*)lhs_hdr + sizeof(pcap_pkthdr_t) + lhs_hdr->caplen - sizeof(expcap_pktftr_t));
-    expcap_pktftr_t* rhs_ftr = (expcap_pktftr_t*)((char*)rhs_hdr + sizeof(pcap_pkthdr_t) + rhs_hdr->caplen - sizeof(expcap_pktftr_t));
+    expcap_pktftr_t* lhs_ftr = buffs[buff_idx_lhs].ftr;
+    expcap_pktftr_t* rhs_ftr = buffs[buff_idx_rhs].ftr;
 
     ch_log_debug1("lhs ts = %lu.%lu vs rhs ts =%lu.%lu\n",
                   (uint64_t)lhs_ftr->ts_secs, (uint64_t)lhs_ftr->ts_psecs,
@@ -196,7 +193,8 @@ int main (int argc, char** argv)
 
     pkt_buff_t wr_buff;
     buff_error_t buff_err;
-    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec);
+    /* No need for conserve_fds yet. */
+    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec, false);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to initialize write buffer: %s\n", buff_strerror(buff_err));
     }
@@ -253,7 +251,6 @@ begin_loop:
         /* Find the read buffer with the earliest timestamp */
         int64_t min_idx          = 0;
         for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
-            // already looking at a packet at this point...?
             if(pkt_buff_eof(&rd_buffs[buff_idx])){
                 if(min_idx == buff_idx){
                     min_idx = buff_idx+1;
@@ -297,12 +294,11 @@ begin_loop:
         pcap_pkthdr_t* pkt_hdr = rd_buffs[min_idx].hdr;
         pcap_pkthdr_t wr_pkt_hdr;
         int64_t packet_copy_bytes = MIN(options.snaplen, (ch_word)pkt_hdr->caplen - (ch_word)sizeof(expcap_pktftr_t));
+#ifndef NDEBUG
         const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + packet_copy_bytes + sizeof(expcap_pktftr_t);
+#endif
 
         /* TODO add more comprehensive filtering in here */
-        ch_log_debug1("Buffer offset=%li, write_buff_size=%li, delta=%li\n",
-                      wr_buff._buff.offset, WRITE_BUFF_SIZE,
-                      WRITE_BUFF_SIZE - wr_buff._buff.offset);
 
         /* Extract the timestamp from the footer */
         expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*)((char*)(pkt_hdr + 1)
