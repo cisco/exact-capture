@@ -48,7 +48,7 @@ typedef enum {
 } buff_error_t;
 
 /* Allocate and initialize a buff_t. */
-buff_error_t buff_init(char* filename, buff_t** buff, int64_t max_filesize, bool conserve_fds, bool allow_duplicates);
+buff_error_t buff_init(char* filename, int64_t max_filesize, bool conserve_fds, bool allow_duplicates, buff_t** buffo);
 
 /* Read a file into a buff_t */
 buff_error_t buff_init_from_file(buff_t** buff, char* filename);

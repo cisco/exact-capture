@@ -34,7 +34,7 @@
 
 #include "src/data_structs/pcap-structures.h"
 #include "src/data_structs/expcap.h"
-#include "tools/data_structs/pkt_buff.h"
+#include "tools/data_structs/pcap_buff.h"
 
 USE_CH_LOGGER_DEFAULT; //(CH_LOG_LVL_DEBUG3, true, CH_LOG_OUT_STDERR, NULL);
 USE_CH_OPTIONS;
@@ -94,7 +94,7 @@ void signal_handler (int signum)
 }
 
 /* Return packet with earliest timestamp */
-int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pkt_buff_t* buffs)
+int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pcap_buff_t* buffs)
 {
     ch_log_debug1("checking minimum pcaksts on %li vs %li at %p\n", buff_idx_lhs, buff_idx_rhs, buffs);
 
@@ -193,24 +193,24 @@ int main (int argc, char** argv)
         ch_log_fatal("Unknown output format type %s\n", options.format );
     }
 
-    pkt_buff_t wr_buff;
+    pcap_buff_t wr_buff;
     buff_error_t buff_err;
     /* No need for conserve_fds yet. */
-    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec, false, options.allow_duplicates);
+    buff_err = pcap_buff_init(options.write, options.snaplen, options.max_file, options.usec, false, options.allow_duplicates, &wr_buff);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to initialize write buffer: %s\n", buff_strerror(buff_err));
     }
 
     /* Allocate N read buffers where */
     const int64_t rd_buffs_count = options.reads->count;
-    pkt_buff_t* rd_buffs = (pkt_buff_t*)calloc(rd_buffs_count, sizeof(pkt_buff_t));
+    pcap_buff_t* rd_buffs = (pcap_buff_t*)calloc(rd_buffs_count, sizeof(pcap_buff_t));
     if(!rd_buffs){
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
     for(int i = 0; i < rd_buffs_count; i++){
-        buff_err = pkt_buff_from_file(&rd_buffs[i], options.reads->first[i]);
+        buff_err = pcap_buff_from_file(&rd_buffs[i], options.reads->first[i]);
         if(buff_err != BUFF_ENONE){
-            ch_log_fatal("Failed to read %s into a pkt_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
+            ch_log_fatal("Failed to read %s into a pcap_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
         }
     }
 
@@ -240,7 +240,7 @@ begin_loop:
         ch_log_debug1("Checking for EOF\n");
         bool all_eof = true;
         for(int i = 0; i < rd_buffs_count; i++){
-            all_eof &= pkt_buff_eof(&rd_buffs[i]);
+            all_eof &= pcap_buff_eof(&rd_buffs[i]);
         }
         if(all_eof){
             ch_log_info("All files empty, exiting now\n");
@@ -253,14 +253,14 @@ begin_loop:
         /* Find the read buffer with the earliest timestamp */
         int64_t min_idx          = 0;
         for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
-            if(pkt_buff_eof(&rd_buffs[buff_idx])){
+            if(pcap_buff_eof(&rd_buffs[buff_idx])){
                 if(min_idx == buff_idx){
                     min_idx = buff_idx+1;
                 }
                 continue;
             }
 
-            pkt_info = pkt_buff_next_packet(&rd_buffs[buff_idx]);
+            pkt_info = pcap_buff_next_packet(&rd_buffs[buff_idx]);
             switch(pkt_info){
             case PKT_PADDING:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n",pkt_idx , buff_idx);
@@ -282,7 +282,7 @@ begin_loop:
                 buff_idx--;
                 continue;
             case PKT_EOF:
-                ch_log_warn("End of file \"%s\"\n", pkt_buff_get_filename(&rd_buffs[buff_idx]));
+                ch_log_warn("End of file \"%s\"\n", pcap_buff_get_filename(&rd_buffs[buff_idx]));
                 goto begin_loop;
                 break;
             case PKT_OK:
@@ -330,7 +330,7 @@ begin_loop:
         /* Copy the packet header, and upto snap len packet data bytes */
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", pcap_record_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
 
-        buff_err = pkt_buff_write(&wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
+        buff_err = pcap_buff_write(&wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
         if(buff_err != BUFF_ENONE){
             ch_log_fatal("Failed to write packet data: %s\n", buff_strerror(buff_err));
         }
@@ -344,7 +344,7 @@ begin_loop:
 
     ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
 
-    buff_err = pkt_buff_flush_to_disk(&wr_buff);
+    buff_err = pcap_buff_flush_to_disk(&wr_buff);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to flush buffer to disk: %s\n", buff_strerror(buff_err));
     }

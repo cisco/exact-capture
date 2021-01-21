@@ -15,7 +15,7 @@
 #include "buff.h"
 #include "data_structs/expcap.h"
 
-buff_error_t buff_init(char* filename, buff_t** buff, int64_t max_filesize, bool conserve_fds, bool allow_duplicates)
+buff_error_t buff_init(char* filename, int64_t max_filesize, bool conserve_fds, bool allow_duplicates, buff_t** buffo)
 {
     buff_t* new_buff;
     new_buff = (buff_t*)calloc(1, sizeof(buff_t));
@@ -33,7 +33,7 @@ buff_error_t buff_init(char* filename, buff_t** buff, int64_t max_filesize, bool
     new_buff->conserve_fds = conserve_fds;
     new_buff->allow_duplicates = allow_duplicates;
 
-    *buff = new_buff;
+    *buffo = new_buff;
     return BUFF_ENONE;
 }
 
@@ -173,7 +173,8 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 
     buff->file_bytes_written += written;
     buff->offset = 0;
-    if(buff->conserve_fds){//
+
+    if(buff->conserve_fds){
         close(buff->fd);
     }
     return BUFF_ENONE;
