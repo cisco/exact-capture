@@ -15,7 +15,7 @@
 #include "buff.h"
 #include "data_structs/expcap.h"
 
-buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, bool conserve_fds)
+buff_error_t buff_init(char* filename, int64_t max_filesize, bool conserve_fds, bool allow_duplicates, buff_t** buffo)
 {
     buff_t* new_buff;
     new_buff = (buff_t*)calloc(1, sizeof(buff_t));
@@ -31,8 +31,9 @@ buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, boo
     new_buff->filename = filename;
     new_buff->max_filesize = max_filesize;
     new_buff->conserve_fds = conserve_fds;
+    new_buff->allow_duplicates = allow_duplicates;
 
-    *buff = new_buff;
+    *buffo = new_buff;
     return BUFF_ENONE;
 }
 
@@ -40,13 +41,19 @@ buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, boo
 buff_error_t buff_new_file(buff_t* buff)
 {
     char full_filename[MAX_FILENAME] = {0};
-    buff_get_full_filename(buff, full_filename);
+    buff_get_full_filename(buff, full_filename, MAX_FILENAME);
+
+    if(buff->fd){
+        close(buff->fd);
+    }
 
     /* Check for files that already have this filename.
        If they exist, append _file_dup to the newly created file */
-    while(access(full_filename, F_OK) == 0 && buff->file_dup > -1){
-        buff->file_dup++;
-        buff_get_full_filename(buff, full_filename);
+    if(buff->allow_duplicates){
+        while(access(full_filename, F_OK) == 0 && buff->file_dup > -1){
+            buff->file_dup++;
+            buff_get_full_filename(buff, full_filename, MAX_FILENAME);
+        }
     }
 
     ch_log_info("Opening output \"%s\"...\n",full_filename);
@@ -66,6 +73,9 @@ buff_error_t buff_new_file(buff_t* buff)
     if(buff->file_header){
         BUFF_TRY(buff_write_file_header(buff));
     }
+
+    buff->file_seg++;
+    buff->file_bytes_written = 0;
     return BUFF_ENONE;
 }
 
@@ -77,7 +87,7 @@ buff_error_t buff_write_file_header(buff_t* buff)
 
     if(buff->conserve_fds){
         char full_filename[MAX_FILENAME] = {0};
-        buff_get_full_filename(buff, full_filename);
+        buff_get_full_filename(buff, full_filename, MAX_FILENAME);
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
         if(buff->fd < 0)
         {
@@ -132,6 +142,10 @@ buff_error_t buff_init_from_file(buff_t** buff, char* filename)
         return BUFF_EMMAP;
     }
 
+    if(madvise(new_buff->data, new_buff->filesize, MADV_SEQUENTIAL) != 0){
+        ch_log_warn("Failed to advise on memory usage: %s\n", strerror(errno));
+    }
+
     *buff = new_buff;
     return BUFF_ENONE;
 }
@@ -141,7 +155,7 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 {
     /* open fd */
     char full_filename[MAX_FILENAME] = {0};
-    buff_get_full_filename(buff, full_filename);
+    buff_get_full_filename(buff, full_filename, MAX_FILENAME);
 
     if(buff->conserve_fds){
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
@@ -159,7 +173,7 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 
     buff->file_bytes_written += written;
     buff->offset = 0;
-    buff->file_seg++;
+
     if(buff->conserve_fds){
         close(buff->fd);
     }
@@ -168,12 +182,11 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 
 buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
 {
-    uint64_t remaining;
+    int64_t remaining;
 
     BUFF_TRY(buff_remaining(buff, &remaining));
     if(remaining <= len){
         BUFF_TRY(buff_flush_to_disk(buff));
-        BUFF_TRY(buff_new_file(buff));;
     }
 
     memcpy(buff->data + buff->offset, bytes, len);
@@ -181,17 +194,8 @@ buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len)
     return BUFF_ENONE;
 }
 
-buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
+buff_error_t buff_remaining(buff_t* buff, int64_t* remaining)
 {
-    if(buff->max_filesize > 0){
-        if(buff->offset > buff->max_filesize){
-            return BUFF_EOVERFLOW;
-        }
-
-        *remaining = buff->max_filesize - buff->offset;
-        return BUFF_ENONE;
-    }
-
     /* This should never happen... better safe than sorry. */
     ifunlikely(buff->offset > BUFF_SIZE){
         return BUFF_EOVERFLOW;
@@ -201,12 +205,26 @@ buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining)
     return BUFF_ENONE;
 }
 
-void buff_get_full_filename(buff_t* buff, char* full_filename)
+int64_t buff_seg_remaining(buff_t* buff)
 {
-    if(buff->file_dup == 0){
-        snprintf(full_filename, MAX_FILENAME, "%s_%i.pcap", buff->filename, buff->file_seg);
+    return buff->max_filesize - (buff->offset + buff->file_bytes_written);
+}
+
+void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len)
+{
+    /* Don't include the segment number in the first file written */
+    if(buff->file_seg == 0){
+        if(buff->file_dup == 0){
+            snprintf(full_filename, len, "%s.pcap", buff->filename);
+        } else {
+            snprintf(full_filename, len, "%s_%i.pcap", buff->filename, buff->file_dup);
+        }
     } else {
-        snprintf(full_filename, MAX_FILENAME, "%s_%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
+        if(buff->file_dup == 0){
+            snprintf(full_filename, len, "%s%i.pcap", buff->filename, buff->file_seg);
+        } else {
+            snprintf(full_filename, len, "%s%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
+        }
     }
 }
 

@@ -8,10 +8,11 @@ typedef struct {
     char* pkt;          // packet data
     expcap_pktftr_t* ftr; // footer
     uint64_t idx;       // index
-    uint64_t snaplen;
+    int64_t snaplen;
+    int64_t max_filesize;
     bool usec;
     buff_t* _buff; // _private buff_t.
-} pkt_buff_t;
+} pcap_buff_t;
 
 typedef enum {
     PKT_OK = 0,
@@ -22,24 +23,25 @@ typedef enum {
 } pkt_info_t;
 
 /* Initialize a packet buffer for writing. */
-buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec, bool conserve_fds);
+buff_error_t pcap_buff_init(char* filename, int64_t snaplen, int64_t max_filesize, bool usec,
+                           bool conserve_fds, bool allow_duplicates, pcap_buff_t* pcap_buffo);
 
 /* Read in a pcap from disk. */
 /* The underlying buff is read only */
-buff_error_t pkt_buff_from_file(pkt_buff_t*  pkt_buff, char* filename);
+buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename);
 
 /* Adjust hdr, data, idx, ftr to point to the next packet */
-pkt_info_t pkt_buff_next_packet(pkt_buff_t* pkt_buff);
+pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff);
 
 /* Get the filename used by the buff_t. */
-char* pkt_buff_get_filename(pkt_buff_t* pkt_buff);
+char* pcap_buff_get_filename(pcap_buff_t* pcap_buff);
 
 /* Write a full packet (headers + data + footer). Footer can be NULL if not used. */
 /* Header caplen will be adjusted to account for the presence of a footer.. */
-buff_error_t pkt_buff_write(pkt_buff_t* pkt_buff, pcap_pkthdr_t* hdr, char* data, size_t data_len, expcap_pktftr_t* ftr);
+buff_error_t pcap_buff_write(pcap_buff_t* pcap_buff, pcap_pkthdr_t* hdr, char* data, size_t data_len, expcap_pktftr_t* ftr);
 
 /* Flushes _buff to disk. */
-buff_error_t pkt_buff_flush_to_disk(pkt_buff_t* pkt_buff);
+buff_error_t pcap_buff_flush_to_disk(pcap_buff_t* pcap_buff);
 
 /* Check if _buff is at eof. */
-bool pkt_buff_eof(pkt_buff_t* pkt_buff);
+bool pcap_buff_eof(pcap_buff_t* pcap_buff);

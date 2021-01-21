@@ -41,7 +41,7 @@
 #include "../src/data_structs/expcap.h"
 #include "../src/data_structs/fusion_hpt.h"
 #include "../src/data_structs/vlan_ethhdr.h"
-#include "data_structs/pkt_buff.h"
+#include "data_structs/pcap_buff.h"
 
 #define BUFF_HMAP_SIZE 1024
 #define MAX_FD_LIMIT 8192
@@ -65,6 +65,7 @@ static struct
     ch_word device;
     ch_bool all;
     ch_bool skip_runts;
+    ch_bool allow_duplicates;
     ch_bool hpt_trailer;
     char* steer_type;
 } options;
@@ -127,7 +128,7 @@ void signal_handler (int signum)
 }
 
 /* Return packet with earliest timestamp */
-int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pkt_buff_t* buffs)
+int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pcap_buff_t* buffs)
 {
     ch_log_debug1("checking minimum packet ts on %li vs %li at %p\n", buff_idx_lhs, buff_idx_rhs, buffs);
 
@@ -170,7 +171,7 @@ int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pkt_buff_t* bu
     return buff_idx_lhs;
 }
 
-static inline int get_key_from_vlan(pkt_buff_t* buff, uint16_t* key)
+static inline int get_key_from_vlan(pcap_buff_t* buff, uint16_t* key)
 {
     if(buff->hdr->len < sizeof(vlan_ethhdr_t)){
         ch_log_error("Packet is too small %"PRIu64"to extract VLAN hdr\n", buff->hdr->len);
@@ -187,7 +188,7 @@ static inline int get_key_from_vlan(pkt_buff_t* buff, uint16_t* key)
     return 0;
 }
 
-static inline int get_key_from_hpt(pkt_buff_t* buff, uint16_t* key)
+static inline int get_key_from_hpt(pcap_buff_t* buff, uint16_t* key)
 {
     if(buff->hdr->len < sizeof(fusion_hpt_trailer_t)){
         ch_log_error("Packet is too small %"PRIu64"to extract HPT trailer\n", buff->hdr->len);
@@ -202,7 +203,7 @@ static inline int get_key_from_hpt(pkt_buff_t* buff, uint16_t* key)
     return 0;
 }
 
-static inline int get_key_from_expcap(pkt_buff_t* buff, uint16_t* key)
+static inline int get_key_from_expcap(pcap_buff_t* buff, uint16_t* key)
 {
     if(buff->hdr->caplen < sizeof(expcap_pktftr_t)){
         ch_log_error("Packet is too small %"PRIu64"to extract expcap trailer\n", buff->hdr->caplen);
@@ -233,7 +234,7 @@ static inline void format_hpt_key(uint16_t key, char* format_str)
     snprintf(format_str, MAX_FILENAME, "_device_%u_port_%u", device, port);
 }
 
-static inline uint16_t get_steer_key(enum steer_type rule, pkt_buff_t* buff)
+static inline uint16_t get_steer_key(enum steer_type rule, pcap_buff_t* buff)
 {
     int status = 0;
     uint16_t key = 0;
@@ -289,19 +290,19 @@ static inline char* format_steer_key(enum steer_type rule, uint16_t key)
     return format_str;
 }
 
-static pkt_buff_t* init_wr_buff(char* filename, bool conserve_fds)
+static pcap_buff_t* init_wr_buff(char* filename, bool conserve_fds)
 {
-    pkt_buff_t* buff = (pkt_buff_t*)malloc(sizeof(pkt_buff_t));
+    pcap_buff_t* buff = (pcap_buff_t*)malloc(sizeof(pcap_buff_t));
     char* full_filename = NULL;
 
     if(!buff){
-        ch_log_fatal("Could not allocate memory for new pkt_buff_t\n");
+        ch_log_fatal("Could not allocate memory for new pcap_buff_t\n");
     }
 
     if(options.write_dir){
         full_filename = (char*)malloc(MAX_FILENAME);
         if(!full_filename){
-            ch_log_fatal("Could not allocate memory for new pkt_buff_t filename\n");
+            ch_log_fatal("Could not allocate memory for new pcap_buff_t filename\n");
         }
         snprintf(full_filename, MAX_FILENAME, "%s/%s%s", options.write_dir, options.write, filename);
 
@@ -309,7 +310,8 @@ static pkt_buff_t* init_wr_buff(char* filename, bool conserve_fds)
         full_filename = options.write;
     }
 
-    buff_error_t err = pkt_buff_init(full_filename, buff, options.snaplen, options.max_file, options.usec, conserve_fds);
+    buff_error_t err = pcap_buff_init(full_filename, options.snaplen, options.max_file, options.usec, conserve_fds,
+                                      options.allow_duplicates, buff);
     if(err != BUFF_ENONE){
         ch_log_fatal("Failed to create a new write buffer: %s\n", buff_strerror(err));
     }
@@ -343,12 +345,13 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL, 'u', "usecpcap", "PCAP output in microseconds", &options.usec, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'S', "snaplen",  "Maximum packet length", &options.snaplen, 1518);
     ch_opt_addbi (CH_OPTION_FLAG,     'r', "skip-runts", "Skip runt packets", &options.skip_runts, false);
+    ch_opt_addbi (CH_OPTION_FLAG,     'D', "allow-duplicates", "Allow duplicate filenames to be used", &options.allow_duplicates, false);
     ch_opt_addbi (CH_OPTION_FLAG,     't', "hpt-trailer", "Extract timestamps from Fusion HPT trailers", &options.hpt_trailer, false);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 's', "steer",    "Steer packets to different files depending on packet contents. Valid values are [hpt, vlan, expcap]", &options.steer_type, NULL);
 
     ch_opt_parse (argc, argv);
 
-    options.max_file *= 1024 * 1024; /* Convert max file size from MB to B */
+    options.max_file *= 1000 * 1000; /* Per tcpdump, max filesize is in 1,000,000B, not 1,048,576B */
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
 
@@ -417,21 +420,21 @@ int main (int argc, char** argv)
         }
     }
 
-    pkt_buff_t* wr_buff;
+    pcap_buff_t* wr_buff;
     buff_error_t buff_err = BUFF_ENONE;
     uint16_t key;
-    ch_hash_map* hmap = ch_hash_map_new(BUFF_HMAP_SIZE, sizeof(pkt_buff_t), NULL);
+    ch_hash_map* hmap = ch_hash_map_new(BUFF_HMAP_SIZE, sizeof(pcap_buff_t), NULL);
 
     /* Allocate N read buffers where */
     const int64_t rd_buffs_count = options.reads->count;
-    pkt_buff_t* rd_buffs = (pkt_buff_t*)calloc(rd_buffs_count, sizeof(pkt_buff_t));
+    pcap_buff_t* rd_buffs = (pcap_buff_t*)calloc(rd_buffs_count, sizeof(pcap_buff_t));
     if(!rd_buffs){
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
     for(int i = 0; i < rd_buffs_count; i++){
-        buff_err = pkt_buff_from_file(&rd_buffs[i], options.reads->first[i]);
+        buff_err = pcap_buff_from_file(&rd_buffs[i], options.reads->first[i]);
         if(buff_err != BUFF_ENONE){
-            ch_log_fatal("Failed to read %s into a pkt_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
+            ch_log_fatal("Failed to read %s into a pcap_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
         }
     }
 
@@ -461,7 +464,7 @@ begin_loop:
         ch_log_debug1("Checking for EOF\n");
         bool all_eof = true;
         for(int i = 0; i < rd_buffs_count; i++){
-            all_eof &= pkt_buff_eof(&rd_buffs[i]);
+            all_eof &= pcap_buff_eof(&rd_buffs[i]);
         }
         if(all_eof){
             ch_log_info("All files empty, exiting now\n");
@@ -473,14 +476,14 @@ begin_loop:
         /* Find the read buffer with the earliest timestamp */
         int64_t min_idx          = 0;
         for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
-            if(pkt_buff_eof(&rd_buffs[buff_idx])){
+            if(pcap_buff_eof(&rd_buffs[buff_idx])){
                 if(min_idx == buff_idx){
                     min_idx = buff_idx+1;
                 }
                 continue;
             }
 
-            pkt_info = pkt_buff_next_packet(&rd_buffs[buff_idx]);
+            pkt_info = pcap_buff_next_packet(&rd_buffs[buff_idx]);
             switch(pkt_info){
             case PKT_PADDING:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n", pkt_idx, buff_idx);
@@ -502,7 +505,7 @@ begin_loop:
                 buff_idx--;
                 continue;
             case PKT_EOF:
-                ch_log_warn("End of file \"%s\"\n", pkt_buff_get_filename(&rd_buffs[buff_idx]));
+                ch_log_debug1("End of file \"%s\"\n", pcap_buff_get_filename(&rd_buffs[buff_idx]));
                 goto begin_loop;
                 break;
             case PKT_OK:
@@ -574,7 +577,7 @@ begin_loop:
         /* Copy the packet header, and upto snap len packet data bytes */
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", pcap_record_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
 
-        buff_err = pkt_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
+        buff_err = pcap_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
         if(buff_err != BUFF_ENONE){
             ch_log_fatal("Failed to write packet data: %s\n", buff_strerror(buff_err));
         }
@@ -592,8 +595,8 @@ begin_loop:
     buff_error_t err;
     uint32_t hmap_size = 0;
     while(hmit.value){
-        wr_buff = (pkt_buff_t*)hmit.value;
-        err = pkt_buff_flush_to_disk(wr_buff);
+        wr_buff = (pcap_buff_t*)hmit.value;
+        err = pcap_buff_flush_to_disk(wr_buff);
         if(err != BUFF_ENONE){
             ch_log_fatal("Failed to flush buffer to disk: %s\n", buff_strerror(buff_err));
         }
