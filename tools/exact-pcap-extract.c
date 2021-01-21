@@ -39,8 +39,8 @@
 
 #include "../src/data_structs/pcap-structures.h"
 #include "../src/data_structs/expcap.h"
-#include "../src/data_structs/fusion_hpt.h"
-#include "../src/data_structs/vlan_ethhdr.h"
+#include "data_structs/fusion_hpt.h"
+#include "data_structs/vlan_ethhdr.h"
 #include "data_structs/pcap_buff.h"
 
 #define BUFF_HMAP_SIZE 1024
@@ -265,7 +265,7 @@ static inline char* format_steer_key(enum steer_type rule, uint16_t key)
     char* format_str = NULL;
 
     switch(rule){
-    case STEER_EXPCAP: // Same formatting is used for HPT and expcap steering.
+    case STEER_EXPCAP: // Fall through - same formatting is used for HPT and expcap steering
     case STEER_FUSION_HPT:
         format_str = (char*)malloc(MAX_FILENAME);
         if(!format_str){
