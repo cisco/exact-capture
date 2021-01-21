@@ -142,6 +142,10 @@ buff_error_t buff_init_from_file(buff_t** buff, char* filename)
         return BUFF_EMMAP;
     }
 
+    if(madvise(new_buff->data, new_buff->filesize, MADV_SEQUENTIAL) != 0){
+        ch_log_warn("Failed to advise on memory usage: %s\n", strerror(errno));
+    }
+
     *buff = new_buff;
     return BUFF_ENONE;
 }
