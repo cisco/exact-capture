@@ -1,3 +1,5 @@
+#include <inttypes.h>
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -7,10 +9,11 @@
 #include <errno.h>
 #include "pkt_buff.h"
 
-buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec, bool conserve_fds)
+buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec,
+                           bool conserve_fds, bool allow_duplicates)
 {
     buff_t* buff = NULL;
-    BUFF_TRY(buff_init(filename, &buff, max_filesize, conserve_fds));
+    BUFF_TRY(buff_init(filename, &buff, max_filesize, conserve_fds, allow_duplicates));
 
     pkt_buff->_buff = buff;
     pkt_buff->snaplen = snaplen;
@@ -107,29 +110,29 @@ buff_error_t pkt_buff_flush_to_disk(pkt_buff_t* pkt_buff){
     return buff_flush_to_disk(pkt_buff->_buff);
 }
 
-
 buff_error_t pkt_buff_write(pkt_buff_t* pkt_buff, pcap_pkthdr_t* hdr, char* data, size_t data_len, expcap_pktftr_t* ftr)
 {
     buff_t* buff = pkt_buff->_buff;
-
-    /* Flush the buffer if we need to */
-    uint64_t bytes_remaining;
-    BUFF_TRY(buff_remaining(buff, &bytes_remaining));
-
     const int64_t pcap_record_bytes = sizeof(pcap_pkthdr_t) + data_len + (ftr ? sizeof(expcap_pktftr_t) : 0);
-    const bool file_full = bytes_remaining < pcap_record_bytes;
-    if(file_full)
-    {
+
+    // there isn't enough space in the buff_t. must flush to disk.
+    int64_t bytes_remaining;
+    BUFF_TRY(buff_remaining(buff, &bytes_remaining));
+    const bool buff_full = bytes_remaining < pcap_record_bytes;
+
+    if(buff_full){
         BUFF_TRY(buff_flush_to_disk(buff));
+    }
 
-        ch_log_info("File is full. Closing\n");
-
-        buff_error_t err = buff_new_file(buff);
-        if(err != BUFF_ENONE){
-            ch_log_fatal("Failed to create new file: %s, %s\n", buff->filename, buff_strerror(err));
+    if(buff->max_filesize > 0){
+        /* tcpdump allows one packet to be written past the filesize limit. */
+        if(buff_seg_remaining(buff) < 0){
+            BUFF_TRY(buff_flush_to_disk(buff));
+            buff_new_file(buff);
         }
     }
 
+    /* Flush the buffer if we need to */
     if(ftr){
         hdr->caplen += sizeof(expcap_pktftr_t);
     }

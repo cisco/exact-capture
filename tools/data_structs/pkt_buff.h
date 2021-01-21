@@ -8,7 +8,8 @@ typedef struct {
     char* pkt;          // packet data
     expcap_pktftr_t* ftr; // footer
     uint64_t idx;       // index
-    uint64_t snaplen;
+    int64_t snaplen;
+    int64_t max_filesize;
     bool usec;
     buff_t* _buff; // _private buff_t.
 } pkt_buff_t;
@@ -22,7 +23,8 @@ typedef enum {
 } pkt_info_t;
 
 /* Initialize a packet buffer for writing. */
-buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec, bool conserve_fds);
+buff_error_t pkt_buff_init(char* filename, pkt_buff_t* pkt_buff, int64_t snaplen, int64_t max_filesize, bool usec,
+                           bool conserve_fds, bool allow_duplicates);
 
 /* Read in a pcap from disk. */
 /* The underlying buff is read only */

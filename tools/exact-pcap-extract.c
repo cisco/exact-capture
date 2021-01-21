@@ -54,6 +54,7 @@ static struct
     ch_word device;
     ch_bool all;
     ch_bool skip_runts;
+    ch_bool allow_duplicates;
 } options;
 
 enum out_format_type {
@@ -162,6 +163,7 @@ int main (int argc, char** argv)
     ch_opt_addii (CH_OPTION_OPTIONAL, 'u', "usecpcap", "PCAP output in microseconds", &options.usec, false);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'S', "snaplen",  "Maximum packet length", &options.snaplen, 1518);
     ch_opt_addbi (CH_OPTION_FLAG,     'r', "skip-runts", "Skip runt packets", &options.skip_runts, false);
+    ch_opt_addbi (CH_OPTION_FLAG,     'D', "allow-duplicates", "Allow duplicate filenames to be used", &options.allow_duplicates, false);
     ch_opt_parse (argc, argv);
 
     options.max_file *= 1024 * 1024; /* Convert max file size from MB to B */
@@ -194,7 +196,7 @@ int main (int argc, char** argv)
     pkt_buff_t wr_buff;
     buff_error_t buff_err;
     /* No need for conserve_fds yet. */
-    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec, false);
+    buff_err = pkt_buff_init(options.write, &wr_buff, options.snaplen, options.max_file, options.usec, false, options.allow_duplicates);
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to initialize write buffer: %s\n", buff_strerror(buff_err));
     }

@@ -21,18 +21,18 @@ typedef struct {
     char* file_header;
     size_t header_size;
     char* data;
-    pcap_pkthdr_t* pkt;
     int eof;
     int fd;
     bool conserve_fds;
     uint64_t filesize;
-    uint64_t max_filesize;
+    int64_t max_filesize;
     uint64_t offset;
     uint64_t pkt_idx;
     int file_seg;
     int file_dup;
     uint64_t file_bytes_written;
     bool read_only;
+    bool allow_duplicates;
 } buff_t;
 
 typedef enum {
@@ -48,7 +48,7 @@ typedef enum {
 } buff_error_t;
 
 /* Allocate and initialize a buff_t. */
-buff_error_t buff_init(char* filename, buff_t** buff, uint64_t max_filesize, bool conserve_fds);
+buff_error_t buff_init(char* filename, buff_t** buff, int64_t max_filesize, bool conserve_fds, bool allow_duplicates);
 
 /* Read a file into a buff_t */
 buff_error_t buff_init_from_file(buff_t** buff, char* filename);
@@ -62,8 +62,11 @@ buff_error_t buff_copy_bytes(buff_t* buff, void* bytes, uint64_t len);
 /* Write out the contents of a buff_t to disk */
 buff_error_t buff_flush_to_disk(buff_t* wr_buff);
 
-/* Get the amount of bytes left available in buffer */
-buff_error_t buff_remaining(buff_t* buff, uint64_t* remaining);
+/* Get the amount of bytes left available in the buffer */
+buff_error_t buff_remaining(buff_t* buff, int64_t* remaining);
+
+/* Get the amount of bytes left in the current segment */
+int64_t buff_seg_remaining(buff_t* buff);
 
 /* Get full buff filename */
 void buff_get_full_filename(buff_t* buff, char* full_filename);
