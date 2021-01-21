@@ -56,7 +56,7 @@ buff_error_t buff_new_file(buff_t* buff)
         }
     }
 
-    ch_log_info("Opening output \"%s\"...\n",full_filename);
+    ch_log_debug1("Opening output \"%s\"...\n",full_filename);
     buff->fd = open(full_filename, O_CREAT | O_TRUNC | O_WRONLY, 0666 );
 
     if(buff->fd < 0){
@@ -95,7 +95,7 @@ buff_error_t buff_write_file_header(buff_t* buff)
             return BUFF_EOPEN;
         }
     }
-    ch_log_info("Writing file header to fd=%i\n", buff->fd);
+    ch_log_debug1("Writing file header to fd=%i\n", buff->fd);
 
     if(write(buff->fd,buff->file_header,buff->header_size) != buff->header_size){
         ch_log_warn("Could not write file header: %s\n", strerror(errno));

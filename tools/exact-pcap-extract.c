@@ -218,20 +218,20 @@ static inline int get_key_from_expcap(pcap_buff_t* buff, uint16_t* key)
     return 0;
 }
 
-static inline void format_vlan_key(uint16_t key, char* format_str)
+static inline void format_vlan_key(uint16_t key, char* output_str, size_t len)
 {
     if(key > 0){
-        snprintf(format_str, MAX_FILENAME, "_vlan_%u", key);
+        snprintf(output_str, len, "_vlan_%u", key);
     } else {
-        format_str[0] = '\0';
+        output_str[0] = '\0';
     }
 }
 
-static inline void format_hpt_key(uint16_t key, char* format_str)
+static inline void format_hpt_key(uint16_t key, char* output_str, size_t len)
 {
     uint8_t device = (uint8_t)(key >> 8);
     uint8_t port = (uint8_t)key;
-    snprintf(format_str, MAX_FILENAME, "_device_%u_port_%u", device, port);
+    snprintf(output_str, len, "_device_%u_port_%u", device, port);
 }
 
 static inline uint16_t get_steer_key(enum steer_type rule, pcap_buff_t* buff)
@@ -271,14 +271,14 @@ static inline char* format_steer_key(enum steer_type rule, uint16_t key)
         if(!format_str){
             ch_log_fatal("Could not allocate memory for formatted filename\n");
         }
-        format_hpt_key(key, format_str);
+        format_hpt_key(key, format_str, MAX_FILENAME);
         break;
     case STEER_VLAN:
         format_str = (char*)malloc(MAX_FILENAME);
         if(!format_str){
             ch_log_fatal("Could not allocate memory for formatted filename\n");
         }
-        format_vlan_key(key, format_str);
+        format_vlan_key(key, format_str, MAX_FILENAME);
         break;
     case STEER_NONE:
         format_str = "";
@@ -378,9 +378,10 @@ int main (int argc, char** argv)
         rlim.rlim_cur = MAX_FD_LIMIT;
         rlim.rlim_max = MAX_FD_LIMIT;
         if(setrlimit(RLIMIT_NOFILE, &rlim) != 0){
-            ch_log_warn("Failed to raise max fd limit: %s\n", strerror(errno));
+            ch_log_warn("Could not raise the limit on concurrently open files.\n"
+                        "Allowing exact-pcap-extract to raise its limit on open files can lead to an improvement in performance.\n"
+                        "See the exact-capture utility documentation for more information.\n", strerror(errno));
             conserve_fds = true;
-            getrlimit(RLIMIT_NOFILE, &rlim);
         }
     }
 
@@ -593,7 +594,6 @@ begin_loop:
 
     ch_hash_map_it hmit = hash_map_first(hmap);
     buff_error_t err;
-    uint32_t hmap_size = 0;
     while(hmit.value){
         wr_buff = (pcap_buff_t*)hmit.value;
         err = pcap_buff_flush_to_disk(wr_buff);
@@ -601,13 +601,6 @@ begin_loop:
             ch_log_fatal("Failed to flush buffer to disk: %s\n", buff_strerror(buff_err));
         }
         hash_map_next(hmap, &hmit);
-        hmap_size++;
     }
-
-    if(conserve_fds && (uint32_t)rlim.rlim_max < hmap_size){
-        ch_log_warn("Performance may be improved by raising the allowed number of concurrently open files.\n");
-        ch_log_warn("Check the exact-capture utilities documentation for more info.\n");
-    }
-
     return 0;
 }
