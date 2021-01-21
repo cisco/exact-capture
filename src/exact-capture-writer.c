@@ -417,8 +417,6 @@ void* writer_thread (void* params)
         /* Release the istream */
         eio_stream_t* istream = istreams[curr_istream].istream;
         eio_rd_rel (istream, NULL);
-        /* Make sure we look at the next ring next time for fairness */
-        curr_istream++;
 
         /*  Stats */
         stats->dbytes += rd_buff_len;
@@ -427,6 +425,7 @@ void* writer_thread (void* params)
         ifunlikely(max_file_size > 0 && bytes_written >= max_file_size)
         {
             eio_des (ostream);
+            istreams[curr_istream].file_id++;
             if (open_file (dest, wparams->dummy_ostream, &ostream,
                            istreams[curr_istream].file_id ))
             {
@@ -435,6 +434,9 @@ void* writer_thread (void* params)
             }
             bytes_written = 0;
         }
+
+        /* Make sure we look at the next ring next time for fairness */
+        curr_istream++;
     }
 
     finished:

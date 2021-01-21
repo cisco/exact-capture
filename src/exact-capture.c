@@ -1004,7 +1004,7 @@ int main (int argc, char** argv)
     remove_dups(options.dests);
 
 
-    max_file_size = options.max_file;
+    max_file_size = options.max_file * 1000 * 1000;
     max_pkt_len = options.snaplen;
     min_pcap_rec = MIN(sizeof(pcap_pkthdr_t) + sizeof(expcap_pktftr_t),MIN_ETH_PKT);
     max_pcap_rec = min_pcap_rec + max_pkt_len;
