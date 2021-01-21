@@ -1,5 +1,3 @@
-#include <inttypes.h>
-
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -66,7 +64,7 @@ pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff)
 
     /* Check if we've overflowed */
     buff_t* buff = pcap_buff->_buff;
-    uint64_t offset = (char*)pcap_buff->hdr - buff->data;
+    int64_t offset = (char*)pcap_buff->hdr - buff->data;
     buff->eof = offset >= buff->filesize;
     if(buff->eof){
         return PKT_EOF;

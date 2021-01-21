@@ -166,7 +166,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,     'D', "allow-duplicates", "Allow duplicate filenames to be used", &options.allow_duplicates, false);
     ch_opt_parse (argc, argv);
 
-    options.max_file *= 1024 * 1024; /* Convert max file size from MB to B */
+    options.max_file *= 1000 * 1000; /* Per tcpdump, max filesize is in 1,000,000B, not 1,048,576B */
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
 
