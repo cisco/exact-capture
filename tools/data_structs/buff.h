@@ -69,7 +69,7 @@ buff_error_t buff_remaining(buff_t* buff, int64_t* remaining);
 int64_t buff_seg_remaining(buff_t* buff);
 
 /* Get full buff filename */
-void buff_get_full_filename(buff_t* buff, char* full_filename);
+void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len);
 
 /* Write file header */
 buff_error_t buff_write_file_header(buff_t* buff);

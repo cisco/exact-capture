@@ -282,7 +282,7 @@ begin_loop:
                 buff_idx--;
                 continue;
             case PKT_EOF:
-                ch_log_warn("End of file \"%s\"\n", pcap_buff_get_filename(&rd_buffs[buff_idx]));
+                ch_log_debug1("End of file \"%s\"\n", pcap_buff_get_filename(&rd_buffs[buff_idx]));
                 goto begin_loop;
                 break;
             case PKT_OK:

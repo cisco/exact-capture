@@ -41,7 +41,7 @@ buff_error_t buff_init(char* filename, int64_t max_filesize, bool conserve_fds, 
 buff_error_t buff_new_file(buff_t* buff)
 {
     char full_filename[MAX_FILENAME] = {0};
-    buff_get_full_filename(buff, full_filename);
+    buff_get_full_filename(buff, full_filename, MAX_FILENAME);
 
     if(buff->fd){
         close(buff->fd);
@@ -52,7 +52,7 @@ buff_error_t buff_new_file(buff_t* buff)
     if(buff->allow_duplicates){
         while(access(full_filename, F_OK) == 0 && buff->file_dup > -1){
             buff->file_dup++;
-            buff_get_full_filename(buff, full_filename);
+            buff_get_full_filename(buff, full_filename, MAX_FILENAME);
         }
     }
 
@@ -87,7 +87,7 @@ buff_error_t buff_write_file_header(buff_t* buff)
 
     if(buff->conserve_fds){
         char full_filename[MAX_FILENAME] = {0};
-        buff_get_full_filename(buff, full_filename);
+        buff_get_full_filename(buff, full_filename, MAX_FILENAME);
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
         if(buff->fd < 0)
         {
@@ -155,7 +155,7 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
 {
     /* open fd */
     char full_filename[MAX_FILENAME] = {0};
-    buff_get_full_filename(buff, full_filename);
+    buff_get_full_filename(buff, full_filename, MAX_FILENAME);
 
     if(buff->conserve_fds){
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
@@ -210,20 +210,20 @@ int64_t buff_seg_remaining(buff_t* buff)
     return buff->max_filesize - (buff->offset + buff->file_bytes_written);
 }
 
-void buff_get_full_filename(buff_t* buff, char* full_filename)
+void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len)
 {
     /* Don't include the segment number in the first file written */
     if(buff->file_seg == 0){
         if(buff->file_dup == 0){
-            snprintf(full_filename, MAX_FILENAME, "%s.pcap", buff->filename);
+            snprintf(full_filename, len, "%s.pcap", buff->filename);
         } else {
-            snprintf(full_filename, MAX_FILENAME, "%s_%i.pcap", buff->filename, buff->file_dup);
+            snprintf(full_filename, len, "%s_%i.pcap", buff->filename, buff->file_dup);
         }
     } else {
         if(buff->file_dup == 0){
-            snprintf(full_filename, MAX_FILENAME, "%s%i.pcap", buff->filename, buff->file_seg);
+            snprintf(full_filename, len, "%s%i.pcap", buff->filename, buff->file_seg);
         } else {
-            snprintf(full_filename, MAX_FILENAME, "%s%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
+            snprintf(full_filename, len, "%s%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
         }
     }
 }
