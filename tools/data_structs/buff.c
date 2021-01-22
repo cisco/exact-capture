@@ -56,7 +56,7 @@ buff_error_t buff_new_file(buff_t* buff)
         }
     }
 
-    ch_log_info("Opening output \"%s\"...\n",full_filename);
+    ch_log_debug1("Opening output \"%s\"...\n",full_filename);
     buff->fd = open(full_filename, O_CREAT | O_TRUNC | O_WRONLY, 0666 );
 
     if(buff->fd < 0){
@@ -74,7 +74,6 @@ buff_error_t buff_new_file(buff_t* buff)
         BUFF_TRY(buff_write_file_header(buff));
     }
 
-    buff->file_seg++;
     buff->file_bytes_written = 0;
     return BUFF_ENONE;
 }
@@ -96,7 +95,8 @@ buff_error_t buff_write_file_header(buff_t* buff)
             return BUFF_EOPEN;
         }
     }
-    ch_log_info("Writing file header to fd=%i\n", buff->fd);
+
+    ch_log_debug1("Writing file header to fd=%i\n", buff->fd);
 
     if(write(buff->fd,buff->file_header,buff->header_size) != buff->header_size){
         ch_log_warn("Could not write file header: %s\n", strerror(errno));
@@ -161,7 +161,7 @@ buff_error_t buff_flush_to_disk(buff_t* buff)
         buff->fd = open(full_filename, O_APPEND | O_WRONLY, 0666 );
     }
     if (buff->fd == -1){
-        ch_log_warn("Failed to append to output: %s\n", strerror(errno));
+        ch_log_warn("Failed to append to output:%s %s\n", full_filename, strerror(errno));
         return BUFF_EOPEN;
     }
 
@@ -217,15 +217,15 @@ void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len)
         if(buff->file_dup == 0){
             snprintf(full_filename, len, "%s.pcap", buff->filename);
         } else {
-            snprintf(full_filename, len, "%s_%i.pcap", buff->filename, buff->file_dup);
+            snprintf(full_filename, len, "%s__%i.pcap", buff->filename, buff->file_dup);
         }
     } else {
         if(buff->file_dup == 0){
-            snprintf(full_filename, len, "%s%i.pcap", buff->filename, buff->file_seg);
+            snprintf(full_filename, len, "%s_%i.pcap", buff->filename, buff->file_seg);
         } else {
-            snprintf(full_filename, len, "%s%i_%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
+            snprintf(full_filename, len, "%s_%i__%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
         }
-    }
+    } 
 }
 
 const char* buff_errlist[] = {

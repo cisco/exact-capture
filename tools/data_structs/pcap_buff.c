@@ -126,6 +126,7 @@ buff_error_t pcap_buff_write(pcap_buff_t* pcap_buff, pcap_pkthdr_t* hdr, char* d
         /* tcpdump allows one packet to be written past the filesize limit. */
         if(buff_seg_remaining(buff) < 0){
             BUFF_TRY(buff_flush_to_disk(buff));
+            buff->file_seg++;
             buff_new_file(buff);
         }
     }
