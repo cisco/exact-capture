@@ -25,7 +25,7 @@ enum {
     EXPCAP_FLAG_TRNC    = 0x08, //Frame truncated
     EXPCAP_FLAG_SWOVFL  = 0x10, //A software overflow happened
     EXPCAP_FLAG_HWOVFL  = 0x20, //A hardware overflow happened
-} expcap_flags;
+};
 
 
 typedef struct expcap_pktftr  {

@@ -12,7 +12,6 @@
 
 
 #include <stdlib.h>
-#include <inttypes.h>
 #include <ctype.h>
 #include <signal.h>
 #include <fcntl.h>
@@ -32,6 +31,9 @@
 #include <chaste/types/types.h>
 #include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/data_structs/hash_map/hash_map.h>
+
+#include <chaste/types/types.h>
+#include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
 #include <chaste/timing/timestamp.h>
@@ -440,15 +442,15 @@ int main (int argc, char** argv)
     }
 
     ch_log_info("starting main loop with %li buffers\n", rd_buffs_count);
-
+  
+    /* At this point we have read buffers ready for reading data and a write
+     * buffer for outputting and file handles ready to go. Fun starts now.
+     * Skip over the PCAP headers in each file */
+    /* Process the merge */
+    ch_log_info("Beginning merge\n");
     if(buff_err != BUFF_ENONE){
         ch_log_fatal("Failed to create new file for writer buff: %s\n", buff_strerror(buff_err));
     }
-
-    /* At this point we have read buffers ready for reading data and a write
-     * buffer for outputting and file handles ready to go. Fun starts now */
-    /* Process the merge */
-    ch_log_info("Beginning merge\n");
 
     int64_t packets_total   = 0;
     int64_t dropped_padding = 0;
@@ -579,6 +581,7 @@ begin_loop:
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", pcap_record_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
 
         buff_err = pcap_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
+
         if(buff_err != BUFF_ENONE){
             ch_log_fatal("Failed to write packet data: %s\n", buff_strerror(buff_err));
         }
@@ -602,5 +605,6 @@ begin_loop:
         }
         hash_map_next(hmap, &hmit);
     }
+  
     return 0;
 }

@@ -95,6 +95,7 @@ buff_error_t buff_write_file_header(buff_t* buff)
             return BUFF_EOPEN;
         }
     }
+
     ch_log_debug1("Writing file header to fd=%i\n", buff->fd);
 
     if(write(buff->fd,buff->file_header,buff->header_size) != buff->header_size){
@@ -224,7 +225,7 @@ void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len)
         } else {
             snprintf(full_filename, len, "%s_%i__%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
         }
-    }
+    } 
 }
 
 const char* buff_errlist[] = {
