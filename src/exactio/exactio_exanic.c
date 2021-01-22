@@ -23,7 +23,7 @@
 #include "ethtool_ts_info.h"
 #endif
 
-
+#include <chaste/log/log.h>
 #include "exactio_exanic.h"
 
 #include "../utils.h"
@@ -33,36 +33,6 @@ typedef enum {
     EXACTIO_FILE_MOD_RESET  = 1,
     EXACTIO_FILE_MOD_TAIL   = 2,
 } exactio_exa_mod_t;
-
-
-
-static void exa_destroy(eio_stream_t* this)
-{
-    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
-    if(priv->closed){
-        return;
-    }
-
-    if(priv->rx){
-        exanic_release_rx_buffer(priv->rx);
-    }
-
-    if(priv->tx){
-        exanic_release_tx_buffer(priv->tx);
-    }
-
-    if(priv->rx_nic){
-        exanic_release_handle(priv->rx_nic);
-    }
-
-    if(priv->tx_nic){
-        exanic_release_handle(priv->tx_nic);
-    }
-
-    priv->closed = true;
-
-}
-
 
 
 //Write operations
@@ -216,82 +186,85 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     struct ifreq ifr;
     int fd;
 
-    if (exanic_get_interface_name(exanic, port_number, ifr.ifr_name, IFNAMSIZ) != 0)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number,
+    if (exanic_get_interface_name(exanic, port_number, ifr.ifr_name, IFNAMSIZ) != 0){
+        ch_log_fatal("%s:%d: %s\n", device, port_number,
                 exanic_get_last_error());
-        exit(1);
+        return -1;
     }
 
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1 ||
-            ioctl(fd, SIOCGIFFLAGS, &ifr) == -1)
-    {
-        fprintf(stderr, "ioctl(SIOCGIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+            ioctl(fd, SIOCGIFFLAGS, &ifr) == -1){
+        ch_log_fatal("ioctl(SIOCGIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
+        return -1;
     }
 
     int ifr_changed = 0;
 
-    if(promisc)
-    {
+    if(promisc){
         ifr_changed |= !(ifr.ifr_flags & IFF_PROMISC);
         ifr.ifr_flags |= IFF_PROMISC;
+    }
+    else {
+        ifr_changed |= (ifr.ifr_flags & IFF_PROMISC);
+        ifr.ifr_flags &= ~IFF_PROMISC;
     }
 
     ifr_changed |= !(ifr.ifr_flags & IFF_UP);
     ifr.ifr_flags |= IFF_UP;
 
-    if (ifr_changed)
-    {
-        if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
-        {
-            fprintf(stderr, "ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
-            exit(1);
+    if (ifr_changed){
+        if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1){
+            ch_log_fatal("ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
+            return -1;
         }
     }
-
-    if(!kernel_bypass)
-        return 0;
 
     /* Get flag names and current setting */
     char flag_names[32][ETH_GSTRING_LEN];
     uint32_t flags = 0;
     if (ethtool_get_flag_names(fd, ifr.ifr_name, flag_names) == -1 ||
-        ethtool_get_priv_flags(fd, ifr.ifr_name, &flags) == -1)
-    {
-        fprintf(stderr, "ethtool_get_priv_flags: %s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+        ethtool_get_priv_flags(fd, ifr.ifr_name, &flags) == -1){
+        ch_log_fatal("ethtool_get_priv_flags: %s:%d: %s\n", device, port_number, strerror(errno));
+        return -1;
     }
 
     /* Look for flag name */
-    int i = 0;
-    for (i = 0; i < 32; i++)
-        if (strcmp("bypass_only", flag_names[i]) == 0)
+    int flag_idx = 0;
+    for (flag_idx = 0; flag_idx < 32; flag_idx++){
+        if (strcmp("bypass_only", flag_names[flag_idx]) == 0){
             break;
-    if (i == 32)
-    {
-        fprintf(stderr, "%s:%d: could not find bypass-only flag \n",
-                device, port_number);
-        exit(1);
-    }
-
-    int flags_changed = !(flags & (1 << i));
-
-    flags |= (1 << i);
-
-    if (flags_changed)
-    {
-        /* Set flags */
-        if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
-        {
-            fprintf(stderr, "ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
-                    (errno == EINVAL) ? "Feature not supported on this port"
-                                      : strerror(errno));
-            exit(1);
         }
     }
+  
+    if (flag_idx == 32){
+        ch_log_fatal( "%s:%d: could not find bypass-only flag. Are you sure this is an ExaNIC?\n",
+                device, port_number);
+        return -1;
+    }
 
+
+    int flags_changed = 0;
+    if(kernel_bypass){
+        flags_changed = !(flags & (1 << flag_idx));
+        flags |= (1 << flag_idx);
+    }
+    else{
+        flags_changed = (flags & (1 << flag_idx));
+        flags &= ~(1 << flag_idx);
+    }    
+
+    if (flags_changed){
+        /* Set flags */
+        if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1){
+            ch_log_fatal("ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
+                    (errno == EINVAL) ? "Feature not supported on this port"
+                                      : strerror(errno));
+            return -1;
+        }
+    }
+    close (fd);
+  
     return 0;
 }
 
@@ -333,9 +306,13 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
             return 1;
         }
 
-        if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
-                             promisc,kernel_bypass)){
-            return 1;
+        /* avoid reset from writer */
+        if (promisc || kernel_bypass) { 
+            if (set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port,
+                             promisc, kernel_bypass)){
+                ch_log_error("Unable to set promisc and/or kernel bypass mode\n");
+                return 1;
+            }
         }
 
     }
@@ -371,6 +348,39 @@ static eio_error_t exa_construct(eio_stream_t* this, exa_args_t* args)
     return 0;
 
 }
+
+void exa_destroy(eio_stream_t* this)
+{
+    exa_priv_t* priv = IOSTREAM_GET_PRIVATE(this);
+
+    if(priv->closed){
+        return;
+    }
+
+    if(set_exanic_params(priv->rx_nic, priv->rx_dev, priv->rx_port, 0, 0)){
+        ch_log_warn("Unable to restore promisc and kernel bypass mode\n");
+    }
+
+    if(priv->rx){
+        exanic_release_rx_buffer(priv->rx);
+    }
+
+    if(priv->tx){
+        exanic_release_tx_buffer(priv->tx);
+    }
+
+    if(priv->rx_nic){
+        exanic_release_handle(priv->rx_nic);
+    }
+
+    if(priv->tx_nic){
+        exanic_release_handle(priv->tx_nic);
+    }
+
+    priv->closed = true;
+
+}
+
 
 NEW_IOSTREAM_DEFINE(exa,exa_args_t, exa_priv_t)
 

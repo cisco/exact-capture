@@ -282,11 +282,13 @@ void* writer_thread (void* params)
     }
 
     eio_stream_t* ostream = NULL;
+    int64_t file_id = 0;
     if (open_file (dest, wparams->dummy_ostream, &ostream, 0))
     {
         ch_log_error("Could not open new output file\n");
         goto finished;
     }
+    file_id++;
 
 
     //**************************************************************************
@@ -428,11 +430,12 @@ void* writer_thread (void* params)
         {
             eio_des (ostream);
             if (open_file (dest, wparams->dummy_ostream, &ostream,
-                           istreams[curr_istream].file_id ))
+                           file_id ))
             {
                 ch_log_error("Could not open new output file\n");
                 goto finished;
             }
+            file_id++;
             bytes_written = 0;
         }
     }
