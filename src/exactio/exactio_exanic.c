@@ -35,8 +35,6 @@ typedef enum {
 } exactio_exa_mod_t;
 
 
-
-
 //Write operations
 static eio_error_t exa_write_acquire(eio_stream_t* this, char** buffer, int64_t* len, int64_t* ts)
 {
@@ -188,77 +186,85 @@ static int set_exanic_params(exanic_t *exanic, char* device, int port_number,
     struct ifreq ifr;
     int fd;
 
-    if (exanic_get_interface_name(exanic, port_number, ifr.ifr_name, IFNAMSIZ) != 0)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number,
+    if (exanic_get_interface_name(exanic, port_number, ifr.ifr_name, IFNAMSIZ) != 0){
+        ch_log_fatal("%s:%d: %s\n", device, port_number,
                 exanic_get_last_error());
-        exit(1);
+        return -1;
     }
 
 
     if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1 ||
-            ioctl(fd, SIOCGIFFLAGS, &ifr) == -1)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+            ioctl(fd, SIOCGIFFLAGS, &ifr) == -1){
+        ch_log_fatal("ioctl(SIOCGIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
+        return -1;
     }
+
+    int ifr_changed = 0;
 
     if(promisc){
+        ifr_changed |= !(ifr.ifr_flags & IFF_PROMISC);
         ifr.ifr_flags |= IFF_PROMISC;
-    }else{
+    }
+    else {
+        ifr_changed |= (ifr.ifr_flags & IFF_PROMISC);
         ifr.ifr_flags &= ~IFF_PROMISC;
     }
-    /* set IFF_UP independent on status */
+
+    ifr_changed |= !(ifr.ifr_flags & IFF_UP);
     ifr.ifr_flags |= IFF_UP;
 
-    if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+    if (ifr_changed){
+        if (ioctl(fd, SIOCSIFFLAGS, &ifr) == -1){
+            ch_log_fatal("ioctl(SIOCSIFFLAGS): %s:%d: %s\n", device, port_number, strerror(errno));
+            return -1;
+        }
     }
-
 
     /* Get flag names and current setting */
     char flag_names[32][ETH_GSTRING_LEN];
     uint32_t flags = 0;
     if (ethtool_get_flag_names(fd, ifr.ifr_name, flag_names) == -1 ||
-        ethtool_get_priv_flags(fd, ifr.ifr_name, &flags) == -1)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number, strerror(errno));
-        exit(1);
+        ethtool_get_priv_flags(fd, ifr.ifr_name, &flags) == -1){
+        ch_log_fatal("ethtool_get_priv_flags: %s:%d: %s\n", device, port_number, strerror(errno));
+        return -1;
     }
 
     /* Look for flag name */
-    int i = 0;
-    for (i = 0; i < 32; i++)
-        if (strcmp("bypass_only", flag_names[i]) == 0)
+    int flag_idx = 0;
+    for (flag_idx = 0; flag_idx < 32; flag_idx++){
+        if (strcmp("bypass_only", flag_names[flag_idx]) == 0){
             break;
-    if (i == 32)
-    {
-        fprintf(stderr, "%s:%d: could not find bypass-only flag \n",
+        }
+    }
+  
+    if (flag_idx == 32){
+        ch_log_fatal( "%s:%d: could not find bypass-only flag. Are you sure this is an ExaNIC?\n",
                 device, port_number);
-        exit(1);
+        return -1;
     }
 
+
+    int flags_changed = 0;
     if(kernel_bypass){
-       flags |= (1 << i);
-    }else{
-       /* only clear bypass_only flag */
-       flags &= ~(1 << i);
+        flags_changed = !(flags & (1 << flag_idx));
+        flags |= (1 << flag_idx);
     }
-    if(!promisc){ 
-       ifr.ifr_flags &= ~IFF_PROMISC;
-    }
+    else{
+        flags_changed = (flags & (1 << flag_idx));
+        flags &= ~(1 << flag_idx);
+    }    
 
-    /* Set flags */
-    if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1)
-    {
-        fprintf(stderr, "%s:%d: %s\n", device, port_number,
-                (errno == EINVAL) ? "Feature not supported on this port"
-                                  : strerror(errno));
-        exit(1);
+    if (flags_changed){
+        /* Set flags */
+        if (ethtool_set_priv_flags(fd, ifr.ifr_name, flags) == -1){
+            ch_log_fatal("ethtool_set_priv_flags: %s:%d: %s\n", device, port_number,
+                    (errno == EINVAL) ? "Feature not supported on this port"
+                                      : strerror(errno));
+            return -1;
+        }
     }
     close (fd);
+  
     return 0;
 }
 
