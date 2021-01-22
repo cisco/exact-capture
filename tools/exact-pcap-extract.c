@@ -27,6 +27,7 @@
 #include <byteswap.h>
 #include <math.h>
 #include <sys/resource.h>
+#include <inttypes.h>
 
 #include <chaste/types/types.h>
 #include <chaste/data_structs/vector/vector_std.h>
