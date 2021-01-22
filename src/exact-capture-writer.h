@@ -54,7 +54,6 @@ typedef struct
 {
     eio_stream_t* istream;
     eio_stream_t* exa_istream;
-    int64_t file_id;
     ch_word dev_id;
     ch_word port_num;
 } istream_state_t;
