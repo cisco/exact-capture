@@ -698,6 +698,7 @@ finished:
     ch_log_debug1("Listener thread %i for %s done.\n", lparams->ltid,
                 lparams->interface);
 
+    eio_des (istream); 
     //free(params); ??
     return NULL;
 }

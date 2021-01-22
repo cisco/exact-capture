@@ -49,6 +49,15 @@ The following table lists all commands available:
       If there are fewer writer threads than <code>--outputs</code>, writer threads will be reused.
     </td>
   <tr>
+    <td>k</td>
+    <td>no-kernel</td>
+    <td><em>(flag)</em></td>
+    <td>      
+      Prevents packets from reaching the kernel, by disabling interrupt generation for packets arriving on the ports used by exact-capture.
+      It is recommended to always enable this option, to ensure the best performance from exact-capture.
+    </td>      
+  </tr>
+  <tr>
     <td>s</td>
     <td>snaplen</td>
     <td>2048B</td>
@@ -133,11 +142,20 @@ The following table lists all commands available:
     </td>      
   </tr>
   <tr>
-    <td>n</td>
+    <td>S</td>
     <td>no-spin</td>
     <td><em>(flag)</em></td>
     <td>                          
       By default Exact Capture outputs a progress “spinner” to the console.
+      This flag disables it.
+    </td>      
+  </tr>
+  <tr>
+    <td>n</td>
+    <td>no-promisc</td>
+    <td><em>(flag)</em></td>
+    <td>                          
+      By default Exact Capture puts the NIC into promiscuous mode.
       This flag disables it.
     </td>      
   </tr>
@@ -149,7 +167,7 @@ The following table lists all commands available:
       Exact Capture supports several performance testing modes.
       These can be used to give a sense of the best possible performance that you can expect from your system configuration.
       The modes are as follows:
-      <ol>
+      <ol start="0">
         <li> No performance testing </li>
         <li>
           Replace all ExaNIC interfaces with a dummy interface.
