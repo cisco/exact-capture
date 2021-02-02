@@ -41,8 +41,8 @@ bin/exact-pcap-match: tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS
 bin/exact-pcap-extract: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(LDFLAGS) -o $@
 
-bin/exact-pcap-modify: utils/exact-pcap-modify.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
-	$(CC) $(CFLAGS) utils/exact-pcap-modify.c $(LDFLAGS) -o $@
+bin/exact-pcap-modify: tools/exact-pcap-modify.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
+	$(CC) $(CFLAGS) tools/exact-pcap-modify.c $(LDFLAGS) -o $@
 
 install: all
 	install -d $(PREFIX)/bin
