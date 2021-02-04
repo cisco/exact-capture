@@ -17,6 +17,7 @@ nav:
     - Internal Architecture: arch.md
     - Tools & Utilities:
         - Exact Extract: extract.md
+	- Exact Modify: modify.md
     - Version History: versions.md
 
 markdown_extensions:
