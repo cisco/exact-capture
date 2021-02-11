@@ -1,6 +1,6 @@
 # Exact Extract
 
-Exact Extract is a utility that extracts packets from expcap files and writes them out into the user-specified format. It outputs capture files that are 
+Exact Extract is a utility that extracts packets from one or more expcap files and writes them out into a user-specified format. It outputs capture files that are 
 ordered by the expcap timestamps present in the original capture.
     
 ```
@@ -8,23 +8,9 @@ $ exact-pcap-extract -i cap0-0.expcap -w extracted -a -f expcap
 ```
 
 !!! Note
-    Exact Extract can take multiple expcap files as its input. It will search for the earliest timestamp in all of the input capture files. This means
-    that the first packet written out will be the packet with the earliest timestamp across all of the input files.
+    Exact Extract can take multiple expcap files as its input. It will search for the earliest timestamp in all of the input capture files. 
+    This means that the first packet written out will be the packet with the earliest timestamp across all of the input files.
     
-Depending upon the options specified by the user, Exact Extract may attempt to keep more files open simultaneously than is allowed the OS. If it is unable to 
-override this limit, it will need to close and open outputs each time a packet is written in order to ensure that it does not exceed this limit. This can
-degrade the performance of Exact Extract, due to the additional overhead of repeatedly opening and closing output files.
-
-On Linux, it is possible to override this limit by giving Exact Extract the "CAP_SYS_RESOURCE" capability to the binary. This can be accomplished by running:
-
-```
-$ sudo setcap cap_sys_resouce+ep exact-pcap-extract
-```
-
-The full list of permissions granted by CAP_SYS_RESOURCE is available on the [capabilities(7)](https://man7.org/linux/man-pages/man7/capabilities.7.html)
-man page. Granting Exact Extract this permission should improve its performance, however it is not a requirement. Users will receive the warning "Could not 
-raise the limit on concurrently open files" if they are exceeding the open file limit.
-
 The following table lists all commands available:
 
 <table>
@@ -178,3 +164,20 @@ The following table lists all commands available:
     </td>
   </t>
 </table>
+
+!!! Note
+    Depending upon the options specified by, Exact Extract may attempt to keep more files open simultaneously than is allowed the OS. 
+    If it is unable to override this limit, it will need to close and open outputs each time a packet is written in order to ensure that it does not exceed this limit. 
+    This can degrade the performance of Exact Extract, due to the additional overhead of repeatedly opening and closing output files.
+
+On Linux, it is possible to override the number of open file descriptors limit by giving Exact Extract the "CAP_SYS_RESOURCE" capability to the binary. 
+This can be accomplished by running:
+
+```
+$ sudo setcap cap_sys_resouce+ep exact-pcap-extract
+```
+
+The full list of permissions granted by CAP_SYS_RESOURCE is available on the [capabilities(7)](https://man7.org/linux/man-pages/man7/capabilities.7.html)
+man page. Granting Exact Extract this permission should improve its performance, however it is not a requirement. Users will receive the warning "Could not 
+raise the limit on concurrently open files" if they are exceeding the open file limit.
+
