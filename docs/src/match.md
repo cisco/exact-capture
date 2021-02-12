@@ -1,6 +1,6 @@
 # Exact PCAP Match
 
-Exact PCAP Match is a tool used to match packets in two separate files.
+Exact PCAP Match (`exact-pcap-match`) is a tool used to match packets in two separate files.
 It outputs timestamps, timestamp deltas (latency) and the packet data of matched packets in a `.csv` file.
 
 Where timestamp deltas are shown, they are produced from `reference_file.timestamp minus input_file.timestamp`.
