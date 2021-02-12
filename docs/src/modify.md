@@ -1,6 +1,6 @@
 # Exact PCAP Modify
 
-Exact PCAP Modify is a tool which can be used to filter and modify Ethernet packets.
+Exact PCAP Modify (`exact-pcap-modify`) is a tool which can be used to filter and modify Ethernet packets.
 Where modifications occur which would invalidate a checksum, Exact PCAP Modify will recalculate a correct checksum in the output file.
 
 It can perform modify/filter operations on the following fields:

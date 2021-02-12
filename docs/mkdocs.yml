@@ -16,8 +16,8 @@ nav:
     - Output Format (expcap): expcap.md
     - Internal Architecture: arch.md
     - Tools & Utilities:
-        - Exact Extract: extract.md
-        - Exact Modify: modify.md
+        - Exact PCAP Extract: extract.md
+        - Exact PCAP Modify: modify.md
     - Version History: versions.md
 
 markdown_extensions:
