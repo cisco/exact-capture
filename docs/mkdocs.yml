@@ -16,6 +16,7 @@ nav:
     - Output Format (expcap): expcap.md
     - Internal Architecture: arch.md
     - Tools & Utilities:
+        - Exact PCAP Analyze: analyze.md
         - Exact PCAP Extract: extract.md
         - Exact PCAP Match: match.md
         - Exact PCAP Modify: modify.md
