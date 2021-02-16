@@ -1,6 +1,6 @@
 # Exact PCAP Parse
 
-Exact PCAP Parse (`exact-pcap-parse`) is a tool used create ASCII dumps from `.pcap` and `.expcap` files. It outputs timestamps and packet data in `.csv` files.
+Exact PCAP Parse (`exact-pcap-parse`) is a tool used to create ASCII dumps from `.pcap` and `.expcap` files. It outputs timestamps and packet data in `.csv` files.
 
 The following table lists all commands available:
 
