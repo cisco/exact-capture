@@ -15,7 +15,8 @@ nav:
     - Performance Tuning: tuning.md
     - Output Format (expcap): expcap.md
     - Internal Architecture: arch.md
-    - Tools & Utlities: utils.md
+    - Tools & Utilities:
+        - Exact Extract: extract.md
     - Version History: versions.md
 
 markdown_extensions:

@@ -6,7 +6,7 @@ GLOBAL_CFLAGS=-g -std=c99 -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700 -f
 RELEASE_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -O3 -Wall -DNDEBUG -DNOIFASSERT
 ASSERT_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -O3 -Wall -DNDEBUG
 DEBUG_CFLAGS=$(INCLUDES) $(GLOBAL_CFLAGS) -Werror -Wall -Wextra -pedantic
-BIN=bin/exact-capture bin/exact-pcap-extract bin/exact-pcap-parse bin/exact-pcap-match bin/exact-pcap-analyze
+BIN=bin/exact-capture bin/exact-pcap-extract bin/exact-pcap-parse bin/exact-pcap-match bin/exact-pcap-modify bin/exact-pcap-analyze
 
 EXACTCAP_SRCS=$(wildcard src/*.c) $(wildcard src/**/*.c)
 EXACTCAP_HDRS=$(wildcard src/*.h) $(wildcard src/**/*.h) 
@@ -43,6 +43,9 @@ bin/exact-pcap-extract: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(EX
 
 bin/exact-pcap-analyze: tools/exact-pcap-analyze.c tools/utils.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) tools/exact-pcap-analyze.c tools/utils.c $(LDFLAGS) -lexanic -o $@
+  
+bin/exact-pcap-modify: tools/exact-pcap-modify.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
+	$(CC) $(CFLAGS) tools/exact-pcap-modify.c $(LDFLAGS) -o $@
 
 install: all
 	install -d $(PREFIX)/bin
@@ -58,4 +61,3 @@ docs:
 clean:
 	rm -rf bin/*
 	$(MAKE) -C docs/ clean
-
