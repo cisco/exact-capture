@@ -19,7 +19,6 @@ nav:
 - Tools & Utilities:
   - Exact PCAP Modify: modify.md
 - Version History: versions.md
-
 markdown_extensions:
   - markdown.extensions.admonition
 
