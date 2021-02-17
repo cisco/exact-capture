@@ -1,22 +1,24 @@
 site_name: Exact Capture Documentation
 site_url: http://exact-capture.io
 theme:
-    name: readthedocs
-    highlightjs: true
+  name: readthedocs
+  highlightjs: true
 
 docs_dir: src
 
 nav:
-    - Introduction: index.md
-    - Installation: install.md
-    - Quick Start: quick.md
-    - Server Requirements: server.md
-    - Configuration Guide: config.md
-    - Performance Tuning: tuning.md
-    - Output Format (expcap): expcap.md
-    - Internal Architecture: arch.md
-    - Tools & Utlities: utils.md
-    - Version History: versions.md
+- Exact Capture:
+  - Introduction: index.md
+  - Installation: install.md
+  - Quick Start: quick.md
+  - Server Requirements: server.md
+  - Configuration Guide: config.md
+  - Performance Tuning: tuning.md
+  - Output Format (expcap): expcap.md
+  - Internal Architecture: arch.md
+- Tools & Utilities:
+  - Exact PCAP Parse: parse.md
+- Version History: versions.md
 
 markdown_extensions:
   - markdown.extensions.admonition
