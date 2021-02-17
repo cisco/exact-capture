@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <netinet/ip.h>
-#include "src/data_structs/pseudo_ip_header.h"
+#include "data_structs/pseudo_ip_header.h"
 
 const uint32_t crc32_tab[] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,

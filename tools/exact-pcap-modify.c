@@ -415,7 +415,6 @@ static inline int is_ipv4(struct ethhdr* eth_hdr, struct vlan_ethhdr* vlan_hdr)
 
 int main(int argc, char** argv)
 {
-    ch_word result = -1;
     int64_t offset = 0;
 
     signal(SIGHUP, signal_handler);
@@ -863,11 +862,12 @@ int main(int argc, char** argv)
                 break;
             }
         default:{
-            /* Other protocols not supported, copy remaining bytes as is */
-            const uint64_t bytes_remaining = pkt_hdr->len - (pbuf - pkt_start) - ETH_CRC_LEN;
+            const uint16_t ip_tot_len = be16toh(rd_ip_hdr->tot_len);
+            const uint64_t bytes_remaining = ip_tot_len - rd_ip_hdr_len;
             memcpy(match_wr_buff.data + match_wr_buff.offset, pbuf, bytes_remaining);
             pbuf += bytes_remaining;
             match_wr_buff.offset += bytes_remaining;
+            break;
         }}
 
     calc_eth_crc:
@@ -939,7 +939,5 @@ int main(int argc, char** argv)
     ch_log_info("Modified %li packets\n", matched_out);
     ch_log_info("Filtered %li packets\n", filtered_out);
     ch_log_info("PCAP modifier, finished\n");
-    result = 0;
-    return result;
-
+    return 0;
 }
