@@ -25,10 +25,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-// m8 testing
-#include <inttypes.h>
-
-
 #include <chaste/types/types.h>
 #include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/options/options.h>
