@@ -23,9 +23,8 @@
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
 
-#include "data_structs/pthread_vec.h"
 #include "data_structs/eiostream_vec.h"
-#include "data_structs/pcap-structures.h"
+#include "data_structs/pcap_buff.h"
 
 #include "data_structs/expcap.h"
 
@@ -42,6 +41,7 @@ struct {
     ch_word offset;
     ch_word max;
     ch_word num;
+    bool write_header;
 } options;
 
 
@@ -81,7 +81,7 @@ int read_expect(int fd, void* buff, ssize_t len, int64_t* offset)
 
 
 void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
-                  bool nl, bool content, int total_out, int64_t timedelta_ns)
+                   bool nl, bool content, int total_out, int64_t timedelta_ns)
 {
     char fmtd[4096] = {0};
 
@@ -111,7 +111,7 @@ void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
                 pkt_ftr->port_id,
                 (int64_t)pkt_ftr->ts_secs, (int64_t)pkt_ftr->ts_psecs);
     }
-
+    
     dprintf(fd, "%s",fmtd);
 
     if(nl){
@@ -146,7 +146,6 @@ int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr
         hexdump(&pkt_hdr, sizeof(pkt_hdr));
         hexdump(pbuf, 4096);
         exit(0);
-
     }
 
     if(read_expect(fd, pbuf, pkt_hdr->caplen, offset)){
@@ -161,9 +160,6 @@ int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr
 
 int main(int argc, char** argv)
 {
-    ch_word result = -1;
-    int64_t offset = 0;
-
     signal(SIGHUP, signal_handler);
     signal(SIGINT, signal_handler);
     signal(SIGPIPE, signal_handler);
@@ -177,6 +173,7 @@ int main(int argc, char** argv)
     ch_opt_addii(CH_OPTION_OPTIONAL,'o',"offset","Offset into the file to start ", &options.offset, 0);
     ch_opt_addii(CH_OPTION_OPTIONAL,'m',"max","Max packets to output (<0 means all)", &options.max, -1);
     ch_opt_addii(CH_OPTION_OPTIONAL,'n',"num-chars","Number of characters to output (<=0 means all)", &options.num, 64);
+    ch_opt_addbi(CH_OPTION_FLAG,'w',"write-header","Write out a header row", &options.write_header, false);
 
     ch_opt_parse(argc,argv);
 
@@ -200,33 +197,9 @@ int main(int argc, char** argv)
     }
 
     ch_log_info("Starting PCAP parser...\n");
-
-    int fd = open(options.input,O_RDONLY);
-    if(fd < 0){
-        ch_log_fatal("Could not open PCAP %s (%s)\n", options.input, strerror(errno));
-    }
-
-    pcap_file_header_t fhdr;
-    if(read_expect(fd, &fhdr, sizeof(fhdr), &offset)){
-        ch_log_fatal("Could not read enough bytes from %s at offset %li, (%li required)\n", options.input, offset, sizeof(pcap_file_header_t));
-    }
-
-    char* magic_str = fhdr.magic == NSEC_TCPDUMP_MAGIC ? "Nansec TCP Dump" :  "UNKNOWN";
-    magic_str = fhdr.magic == TCPDUMP_MAGIC ? "TCP Dump" :  magic_str;
-    if(options.verbose){
-        printf("Magic    0x%08x (%i) (%s)\n", fhdr.magic, fhdr.magic, magic_str);
-        printf("Ver Maj  0x%04x     (%i)\n", fhdr.version_major, fhdr.version_major);
-        printf("Ver Min  0x%04x     (%i)\n", fhdr.version_minor, fhdr.version_minor);
-        printf("Thiszone 0x%08x (%i)\n", fhdr.thiszone, fhdr.thiszone);
-        printf("SigFigs  0x%08x (%i)\n", fhdr.sigfigs, fhdr.sigfigs);
-        printf("Snap Len 0x%08x (%i)\n", fhdr.snaplen, fhdr.snaplen);
-        printf("Link typ 0x%08x (%i)\n", fhdr.linktype, fhdr.linktype);
-    }
-
-    pcap_pkthdr_t pkt_hdr;
-    char pbuf[1024 * 64] = {0};
-    if(read_packet(fd, &offset, fhdr.snaplen, &pkt_hdr, pbuf)){
-        exit(0);
+    pcap_buff_t buff;
+    if(pcap_buff_from_file(&buff, options.input) != BUFF_ENONE){
+        ch_log_fatal("Failed to create a new pcap buff from file: %s\n", options.input);
     }
 
     int csv_fd = -1;
@@ -235,27 +208,34 @@ int main(int argc, char** argv)
         if(csv_fd < 0){
             ch_log_fatal("Could not open in missed file %s (%s)\n", options.csv, strerror(errno));
         }
-        if(expcap){
-            dprintf(csv_fd,"cap port,seconds.picos,");
-        }
-        dprintf(csv_fd,"seconds.nanos,length,payload\n");
 
+        if(options.write_header){
+            dprintf(csv_fd,"packet_num,delta_ns,seconds.nanos,capture_length,packet_length");
+            if(expcap){
+                dprintf(csv_fd,",device_id,port_id,seconds.picos");
+            }
+
+            dprintf(csv_fd,"\n");
+        }
     }
 
     int64_t timenowns = 0;
     int64_t timeprevns = 0;
     int64_t total_out = 0;
+    pkt_info_t info;
     for(int pkt_num = 0; !stop && pkt_num < options.offset + options.max; pkt_num++,
-    timeprevns = timenowns ){
+            timeprevns = timenowns ){
         if(pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Loaded %li,000,000 packets\n", pkt_num/1000/1000);
         }
 
-
-        if(read_packet(fd, &offset, fhdr.snaplen, &pkt_hdr, pbuf)){
+        info = pcap_buff_next_packet(&buff);
+        if(info == PKT_EOF){
             break;
         }
-        timenowns = pkt_hdr.ts.ns.ts_sec * 1000ULL * 1000 * 1000 + pkt_hdr.ts.ns.ts_nsec;
+
+        pcap_pkthdr_t hdr = *buff.hdr;
+        timenowns = hdr.ts.ns.ts_sec * 1000ULL * 1000 * 1000 + hdr.ts.ns.ts_nsec;
 
         if(timeprevns == 0){
             timeprevns = timenowns;
@@ -263,32 +243,28 @@ int main(int argc, char** argv)
 
         const int64_t time_delta = timenowns - timeprevns;
 
-
         if(pkt_num < options.offset){
             continue;
         }
 
-
         if(options.verbose){
-            dprint_packet(STDOUT_FILENO, expcap, &pkt_hdr, pbuf, true, true, total_out, time_delta );
+            dprint_packet(STDOUT_FILENO, expcap, &hdr, buff.pkt, true, true, total_out, time_delta);
         }
 
         if(csv_fd > 0){
-            dprint_packet(csv_fd, expcap, &pkt_hdr, pbuf, true, true, total_out, time_delta);
+            dprint_packet(csv_fd, expcap, &hdr, buff.pkt, true, true, total_out, time_delta);
         }
 
-
         total_out++;
-
-
     }
 
 
-    close(fd);
-    if(csv_fd) close(csv_fd);
+    if(csv_fd){
+        close(csv_fd);
+    }
 
     ch_log_info("Output %li packets\n", total_out);
     ch_log_info("PCAP parser, finished\n");
-    return result;
+    return 0;
 
 }
