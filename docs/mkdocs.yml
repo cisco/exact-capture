@@ -18,6 +18,7 @@ nav:
   - Internal Architecture: arch.md
 - Tools & Utilities:
   - Overview: utils.md
+  - Exact PCAP Extract: extract.md
 - Version History: versions.md
 
 markdown_extensions:
