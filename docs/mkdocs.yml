@@ -17,11 +17,13 @@ nav:
   - Output Format (expcap): expcap.md
   - Internal Architecture: arch.md
 - Tools & Utilities:
+  - Overview: utils.md
   - Exact PCAP Extract: extract.md
 - Version History: versions.md
 
 markdown_extensions:
   - markdown.extensions.admonition
+  - markdown.extensions.fenced_code
 
 plugins:
   - search
