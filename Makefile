@@ -30,9 +30,9 @@ bin/exact-capture: $(EXACTCAP_SRCS) $(EXACTCAP_HDRS) $(LIBCASHTE_HDRS)
 	mkdir -p bin
 	$(CC) $(CFLAGS) $(EXACTCAP_SRCS) $(LDFLAGS) -lm -lexanic -lpthread -lrt -o $@ 
 
-bin/exact-pcap-parse: tools/exact-pcap-parse.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
+bin/exact-pcap-parse: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	mkdir -p bin
-	$(CC) $(CFLAGS) tools/exact-pcap-parse.c $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(LDFLAGS) -o $@
 
 bin/exact-pcap-match: tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	mkdir -p bin
