@@ -18,8 +18,9 @@ nav:
   - Internal Architecture: arch.md
 - Tools & Utilities:
   - Overview: utils.md
-  - Exact PCAP Match: match.md
   - Exact PCAP Extract: extract.md
+  - Exact PCAP Modify: modify.md
+  - Exact PCAP Match: match.md
 - Version History: versions.md
 
 markdown_extensions:
