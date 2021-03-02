@@ -109,7 +109,7 @@ buff_error_t buff_write_file_header(buff_t* buff)
     return BUFF_ENONE;
 }
 
-buff_error_t buff_init_from_file(buff_t** buff, char* filename)
+buff_error_t buff_init_from_file(buff_t** buff, char* filename, size_t header_size)
 {
     buff_t* new_buff = (buff_t*)calloc(1, sizeof(buff_t));
     if(!new_buff){
@@ -118,20 +118,24 @@ buff_error_t buff_init_from_file(buff_t** buff, char* filename)
 
     new_buff->read_only = true;
     new_buff->filename = filename;
+    new_buff->header_size = header_size;
     new_buff->fd = open(new_buff->filename,O_RDONLY);
     if(!new_buff->fd){
-        ch_log_warn("Could not open input file %s: \"%s\"",
-                    new_buff->filename, strerror(errno));
+        ch_log_warn("Could not open input file %s: \"%s\"", new_buff->filename, strerror(errno));
         return BUFF_EOPEN;
     }
 
     struct stat st = {0};
     if(stat(new_buff->filename, &st)){
-        ch_log_warn("Could not stat file %s: \"%s\"\n",
-                    new_buff->filename, strerror(errno));
+        ch_log_warn("Could not stat file %s: \"%s\"\n", new_buff->filename, strerror(errno));
         return BUFF_ESTAT;
     }
     new_buff->filesize = st.st_size;
+    if(new_buff->filesize < header_size){
+        ch_log_warn("Cannot open file for reading, file header size is greater than total file size.\n");
+        return BUFF_EBADHEADER;
+    }
+
     new_buff->data = mmap(NULL, new_buff->filesize,
                           PROT_READ,
                           MAP_PRIVATE , //| MAP_POPULATE ,
@@ -141,6 +145,7 @@ buff_error_t buff_init_from_file(buff_t** buff, char* filename)
                     new_buff->filename, strerror(errno));
         return BUFF_EMMAP;
     }
+    new_buff->file_header = new_buff->data;
 
     if(madvise(new_buff->data, new_buff->filesize, MADV_SEQUENTIAL) != 0){
         ch_log_warn("Failed to advise on memory usage: %s\n", strerror(errno));
@@ -237,7 +242,8 @@ const char* buff_errlist[] = {
     "Failed to stat file associated with this buff_t", // BUFF_ESTAT
     "Failed to copy bytes to this buff_t",             // BUFF_ECOPY
     "Buffer offset is greater than the allowed size",  // BUFF_EOVERFLOW
-    "Attempted to write to read-only buff_t"           // BUFF_EREADONLY
+    "Attempted to write to read-only buff_t",          // BUFF_EREADONLY
+    "Failed to read file header when creating buff_t"  // BUFF_EBADHEADER
 };
 
 const char* buff_strerror(buff_error_t err){
