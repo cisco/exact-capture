@@ -19,7 +19,6 @@
 #include <errno.h>
 
 #include <chaste/types/types.h>
-#include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
 #include <chaste/utils/util.h>
