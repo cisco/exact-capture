@@ -19,7 +19,9 @@ typedef enum {
     PKT_PADDING,
     PKT_RUNT,
     PKT_ERROR,
-    PKT_EOF
+    PKT_EOF,
+    PKT_OVER_SNAPLEN,
+    PKT_LEN_TRUNCATED // Don't like this name, any suggestions?
 } pkt_info_t;
 
 /* Initialize a packet buffer for writing. */
@@ -45,3 +47,6 @@ buff_error_t pcap_buff_flush_to_disk(pcap_buff_t* pcap_buff);
 
 /* Check if _buff is at eof. */
 bool pcap_buff_eof(pcap_buff_t* pcap_buff);
+
+/* Translate an info value to a string */
+const char* pcap_buff_strinfo(pkt_info_t info);

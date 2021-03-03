@@ -45,13 +45,14 @@ typedef enum {
     BUFF_ECOPY,        // Failed to copy bytes to a buff_t
     BUFF_EOVERFLOW,    // Buffer offset is greater than the allocated buffer size.
     BUFF_EREADONLY,    // Attempting to write to a read-only buffer.
+    BUFF_EBADHEADER,   // Failed to open file as buff_t, due to a badly formed file header.
 } buff_error_t;
 
 /* Allocate and initialize a buff_t. */
 buff_error_t buff_init(char* filename, int64_t max_filesize, bool conserve_fds, bool allow_duplicates, buff_t** buffo);
 
 /* Read a file into a buff_t */
-buff_error_t buff_init_from_file(buff_t** buff, char* filename);
+buff_error_t buff_init_from_file(buff_t** buff, char* filename, size_t header_size);
 
 /* Create a new pcap file header within a buff_t */
 buff_error_t buff_new_file(buff_t* buff);
