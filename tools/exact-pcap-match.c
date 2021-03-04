@@ -167,17 +167,7 @@ int main (int argc, char** argv)
     ch_log_info("Starting PCAP Matcher\n");
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
-
-    pcap_buff_t ref_buff = {0};
-    if(pcap_buff_from_file(&ref_buff, options.ref) != BUFF_ENONE){
-        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.ref);
-    }
-
-    pcap_buff_t inp_buff = {0};
-    if(pcap_buff_from_file(&inp_buff, options.input) != BUFF_ENONE){
-        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.input);
-    }
-
+    
     int fd_out = open (options.csv, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd_out < 0){
         ch_log_fatal("Could not open output csv %s (%s)\n", options.csv,
@@ -226,9 +216,13 @@ int main (int argc, char** argv)
     ch_hash_map* hmap = ch_hash_map_new (128 * 1024 * 1024, sizeof(value_t),
                                          NULL);
 
-    ch_log_info("Loading reference file %s...\n", options.ref);
-
     /* Load up the reference file into the hashmap*/
+    pcap_buff_t ref_buff = {0};
+    ch_log_info("Loading reference file %s...\n", options.ref);
+    if(pcap_buff_from_file(&ref_buff, options.ref) != BUFF_ENONE){
+        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.ref);
+    }
+
     int64_t pkt_num = 0;
     int64_t loaded = 0;
     for (pkt_num = 0; !stop && pkt_num < options.max_ref + options.offset_ref; pkt_num++){
@@ -244,10 +238,18 @@ int main (int argc, char** argv)
             goto ref_pcap_loaded;
         case PKT_OVER_SNAPLEN:
             ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, ref_buff.snaplen, ref_buff.hdr->len);
-        case PKT_LEN_TRUNCATED:
-            ch_log_warn("Packet data length (%d) is < capture length (%d).\n", ref_hdr->len, ref_hdr->caplen);
             break;
-        default:
+        case PKT_SNAPPED:
+            if(options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", ref_hdr->caplen, ref_hdr->len);
+            }
+            break;
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.ref);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
             break;
         }
 
@@ -268,8 +270,10 @@ int main (int argc, char** argv)
             val.pkt_ftr = *ref_buff.ftr;
         }
 
+        const int64_t caplen = expcap ? ref_hdr->caplen - sizeof(expcap_pktftr_t) : ref_hdr->caplen;
+        
         /*Use the whole packet as the key, and the header as the value */
-        hash_map_push (hmap, ref_buff.pkt, ref_hdr->len, &val);
+        hash_map_push (hmap, ref_buff.pkt, caplen, &val);
 
         loaded++;
     }
@@ -280,13 +284,16 @@ ref_pcap_loaded:
                 options.ref);
 
     ch_log_info("Loading input file %s...\n", options.input);
+    pcap_buff_t inp_buff = {0};
+    if(pcap_buff_from_file(&inp_buff, options.input) != BUFF_ENONE){
+        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.input);
+    }
 
     int64_t total_matched = 0;
     int64_t total_lost = 0;
     for (pkt_num = 0; !stop && pkt_num < options.max_inp + options.offset_ref;
             pkt_num++){
-        if (pkt_num && pkt_num % (1000 * 1000) == 0)
-        {
+        if (pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Processed %li,000,000 packets\n", pkt_num / 1000 / 1000);
         }
 
@@ -300,10 +307,17 @@ ref_pcap_loaded:
         case PKT_OVER_SNAPLEN:
             ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, inp_buff.snaplen, inp_buff.hdr->len);
             break;
-        case PKT_LEN_TRUNCATED:
-            ch_log_warn("Packet data length (%d) is < capture length (%d).\n", inp_hdr->len, inp_hdr->caplen);
+        case PKT_SNAPPED:
+            if (options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", inp_hdr->len, inp_hdr->caplen);
+            }
             break;
-        default:
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.input);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
             break;
         }
 
@@ -317,7 +331,8 @@ ref_pcap_loaded:
         }
 
         /* Look for this packet in the hash map */
-        ch_hash_map_it hmit = hash_map_get_first (hmap, inp_buff.pkt, inp_hdr->len);
+        const int64_t caplen = expcap ? inp_hdr->caplen - sizeof(expcap_pktftr_t) : inp_hdr->caplen;
+        ch_hash_map_it hmit = hash_map_get_first (hmap, inp_buff.pkt, caplen);
         if (!hmit.key){
             total_lost++;
             if (fd_inp_miss > 0)
@@ -407,6 +422,9 @@ find_input_misses:
     ch_log_info("%-12li packets from input file found in reference file.\n", total_matched);
     ch_log_info("%-12li packets from input file never found in reference file\n", total_lost);
     ch_log_info("%-12li packets in reference were never matched with input\n\n", missing_input);
+
+    pcap_buff_close(&ref_buff);
+    pcap_buff_close(&inp_buff);
 
     if (fd_inp_miss > 0){
         close (fd_inp_miss);
