@@ -265,7 +265,8 @@ const char* buff_errlist[] = {
     "Failed to copy bytes to this buff_t",             // BUFF_ECOPY
     "Buffer offset is greater than the allowed size",  // BUFF_EOVERFLOW
     "Attempted to write to read-only buff_t",          // BUFF_EREADONLY
-    "Failed to read file header when creating buff_t"  // BUFF_EBADHEADER
+    "Failed to read file header when creating buff_t", // BUFF_EBADHEADER
+    "Failed to close buff_t"                           // BUFF_ECLOSE
 };
 
 const char* buff_strerror(buff_error_t err){
