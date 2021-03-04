@@ -230,9 +230,31 @@ void buff_get_full_filename(buff_t* buff, char* full_filename, size_t len)
         } else {
             snprintf(full_filename, len, "%s_%i__%i.pcap", buff->filename, buff->file_seg, buff->file_dup);
         }
-    } 
+    }
 }
 
+buff_error_t buff_close(buff_t* buff){
+    /* conserve_fds will mean that the fd is already closed */
+    if(buff->conserve_fds){
+        return BUFF_ENONE;
+    }
+
+    if(buff->read_only){
+        if(munmap(buff->data, BUFF_SIZE) != 0){
+            ch_log_warn("Failed to unmap memory allocated for buff_t (%s) : %s\n", buff->filename, strerror(errno));
+            return BUFF_ECLOSE;
+        }
+    } else{
+        free(buff->data);
+    }
+
+    if(close(buff->fd) != 0){
+        ch_log_warn("Failed to close buff_t (%s) : %s\n", buff->filename, strerror(errno));
+        return BUFF_ECLOSE;
+    }
+
+    return BUFF_ENONE;
+}
 const char* buff_errlist[] = {
     "Operation succeeded",                             // BUFF_ENONE
     "Failed to allocate memory for buff_t",            // BUFF_EALLOC
@@ -243,7 +265,8 @@ const char* buff_errlist[] = {
     "Failed to copy bytes to this buff_t",             // BUFF_ECOPY
     "Buffer offset is greater than the allowed size",  // BUFF_EOVERFLOW
     "Attempted to write to read-only buff_t",          // BUFF_EREADONLY
-    "Failed to read file header when creating buff_t"  // BUFF_EBADHEADER
+    "Failed to read file header when creating buff_t", // BUFF_EBADHEADER
+    "Failed to close buff_t"                           // BUFF_ECLOSE
 };
 
 const char* buff_strerror(buff_error_t err){

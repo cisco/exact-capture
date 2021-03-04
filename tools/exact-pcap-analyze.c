@@ -159,10 +159,17 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
         case PKT_OVER_SNAPLEN:
             ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, buff.snaplen, buff.hdr->len);
             break;
-        case PKT_LEN_TRUNCATED:
-            ch_log_warn("Packet data length (%d) is < capture length (%d).\n", pkt_hdr->len, pkt_hdr->caplen);
+        case PKT_SNAPPED:
+            if(options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", pkt_hdr->caplen, pkt_hdr->len);
+            }
             break;
-        default:
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.input);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
             break;
         }
 
@@ -358,5 +365,4 @@ int main(int argc, char** argv)
     ch_log_info("PCAP analyzer, finished\n");
     result = 0;
     return result;
-
 }
