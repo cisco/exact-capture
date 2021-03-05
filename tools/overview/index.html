@@ -72,7 +72,7 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#example-use-case">Example Use Case</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#toolhain-overview">Toolhain Overview</a>
+    <li class="toctree-l2"><a class="reference internal" href="#toolchain-overview">Toolchain Overview</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#1-capture">1. Capture</a>
     </li>
@@ -143,9 +143,11 @@
 <p>Exact Capture ships with a number of additional tools. 
 These additional tools are designed to facilitate working with/converting <a href="../../expcap/"><code>expcap</code></a> formatted output files and to assist with performing benchmarking/performance measurement using exact-capture.
 This guide provides an overview of the tools and a detailed example use case to understand how they fit together.</p>
-<p>Following is a brief description of each tool:
-* <strong><a href="../extract/">exact-pcap-extract</a></strong> - This tool has several functions (which may all be applied at once if required): 
-  1) At runtime, exact-capture may be configured to output several <code>expcap</code> files (to maximize capture performance).<br />
+<p>Following is a brief description of each tool:</p>
+<ul>
+<li><strong><a href="../extract/">exact-pcap-extract</a></strong> - This tool has several functions (which may all be applied at once if required): </li>
+</ul>
+<p>1) At runtime, exact-capture may be configured to output several <code>expcap</code> files (to maximize capture performance).<br />
      The <code>exact-pcap-extract</code> tool can be used to <em>merge</em> all of these <code>expcap</code> files into one output file. 
   2) Some users may prefer to work with <code>pcap</code> formatted capture files instead of <code>expcap</code> format.
      <code>exact-pcap-extract</code> can be used to convert from <code>expcap</code> to standard <code>pcap</code> output format. 
@@ -187,7 +189,7 @@ The measurement configuration is shown in the diagram below:</p>
 The Nexus 3550-F HPT has a layer 1 crosspoint switch internally which is used to both send packets to the timesatmping mirror (internally), and, to replicate the same packets out the Nexus 3550-T switch (which is the <em>Device Under Test</em>  or DUT).
 Timestamped packets are sent to the <code>exact-capture</code> host on port <code>exanic0:0</code>.
 Packets leaving the Nexus 3550-T are sent to the Nexus 3550-F HPT, also timestamped, and also sent to the capture host on port <code>exanic0:0</code>.</p>
-<h2 id="toolhain-overview">Toolhain Overview</h2>
+<h2 id="toolchain-overview">Toolchain Overview</h2>
 <p>The following figure shows an overview of the <code>exact-capture</code> toolchain used in this example.
 Details of each step are described below. </p>
 <p><img alt="The Exact Capture toolchain" src="../../img/exact-capture-toolchain.png" /></p>
