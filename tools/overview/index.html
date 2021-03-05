@@ -147,26 +147,28 @@ This guide provides an overview of the tools and a detailed example use case to 
 <ul>
 <li>
 <p><strong><a href="../extract/">exact-pcap-extract</a></strong> - This tool has several functions (which may all be applied at once if required): </p>
-</li>
+<ol>
 <li>
 <p>At runtime, exact-capture may be configured to output several <code>expcap</code> files (to maximize capture performance). 
-     The <code>exact-pcap-extract</code> tool can be used to <em>merge</em> all of these <code>expcap</code> files into one output file. </p>
+The <code>exact-pcap-extract</code> tool can be used to <em>merge</em> all of these <code>expcap</code> files into one output file. </p>
 </li>
 <li>
 <p>Some users may prefer to work with <code>pcap</code> formatted capture files instead of <code>expcap</code> format.
-     <code>exact-pcap-extract</code> can be used to convert from <code>expcap</code> to standard <code>pcap</code> output format. </p>
+<code>exact-pcap-extract</code> can be used to convert from <code>expcap</code> to standard <code>pcap</code> output format. </p>
 </li>
 <li>
 <p>Nexus 3550-F HPT devices can append <code>HPT</code> (High Precision Timestamping) trailers to packets. 
-     Users may want to strip these trailers and recover the timetamps into <code>expcap</code> or <code>pcap</code> format. </p>
+Users may want to strip these trailers and recover the timetamps into <code>expcap</code> or <code>pcap</code> format. </p>
 </li>
 <li>
 <p>Users may be interested in the analysing only specific capture ports (as stored in a VLAN header, <code>HPT</code> trailer, or <code>expcap</code> footer)
-     <code>exact-pcap-extract</code> can be used to filter packets in the input file(s) so that only a specific capture port is present in the output file. </p>
+<code>exact-pcap-extract</code> can be used to filter packets in the input file(s) so that only a specific capture port is present in the output file. </p>
 </li>
 <li>
 <p>Users may be interested in generating a separate output file for every the capture port (as stored in a VLAN header, <code>HPT</code> trailer, or <code>expcap</code> footer) that is present in the input file(s).
-     <code>exact-pcap-extract</code> can be configured to steer packets into separate output files based on the capture port ID.</p>
+<code>exact-pcap-extract</code> can be configured to steer packets into separate output files based on the capture port ID.</p>
+</li>
+</ol>
 </li>
 <li>
 <p><strong><a href="../analyze/">exact-pcap-analyze</a></strong> - This tool prints statistics about the packet rates/throughput for a given <code>pcap</code> or <code>expcap</code> capture file.
