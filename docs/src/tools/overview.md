@@ -5,17 +5,22 @@ These additional tools are designed to facilitate working with/converting [`expc
 This guide provides an overview of the tools and a detailed example use case to understand how they fit together.
 
 Following is a brief description of each tool:
+
 * **[exact-pcap-extract](extract.md)** - This tool has several functions (which may all be applied at once if required): 
-  1) At runtime, exact-capture may be configured to output several `expcap` files (to maximize capture performance).  
-	 The `exact-pcap-extract` tool can be used to *merge* all of these `expcap` files into one output file. 
-  2) Some users may prefer to work with `pcap` formatted capture files instead of `expcap` format.
-     `exact-pcap-extract` can be used to convert from `expcap` to standard `pcap` output format. 
-  3) Nexus 3550-F HPT devices can append `HPT` (High Precision Timestamping) trailers to packets. 
-     Users may want to strip these trailers and recover the timetamps into `expcap` or `pcap` format. 
-  4) Users may be interested in the analysing only specific capture ports (as stored in a VLAN header, `HPT` trailer, or `expcap` footer)
-     `exact-pcap-extract` can be used to filter packets in the input file(s) so that only a specific capture port is present in the output file. 
-  5) Users may be interested in generating a separate output file for every the capture port (as stored in a VLAN header, `HPT` trailer, or `expcap` footer) that is present in the input file(s).
-     `exact-pcap-extract` can be configured to steer packets into separate output files based on the capture port ID.
+    1. At runtime, exact-capture may be configured to output several `expcap` files (to maximize capture performance). 
+    The `exact-pcap-extract` tool can be used to *merge* all of these `expcap` files into one output file. 
+
+    2. Some users may prefer to work with `pcap` formatted capture files instead of `expcap` format.
+    `exact-pcap-extract` can be used to convert from `expcap` to standard `pcap` output format. 
+
+    3. Nexus 3550-F HPT devices can append `HPT` (High Precision Timestamping) trailers to packets. 
+    Users may want to strip these trailers and recover the timetamps into `expcap` or `pcap` format. 
+
+    4. Users may be interested in the analysing only specific capture ports (as stored in a VLAN header, `HPT` trailer, or `expcap` footer)
+    `exact-pcap-extract` can be used to filter packets in the input file(s) so that only a specific capture port is present in the output file. 
+
+    5. Users may be interested in generating a separate output file for every the capture port (as stored in a VLAN header, `HPT` trailer, or `expcap` footer) that is present in the input file(s).
+    `exact-pcap-extract` can be configured to steer packets into separate output files based on the capture port ID.
 
 * **[exact-pcap-analyze](analyze.md)** - This tool prints statistics about the packet rates/throughput for a given `pcap` or `expcap` capture file.
   It is useful for "sanity checking" basic properties of a capture file before performing further analysis.
@@ -48,7 +53,7 @@ Timestamped packets are sent to the `exact-capture` host on port `exanic0:0`.
 Packets leaving the Nexus 3550-T are sent to the Nexus 3550-F HPT, also timestamped, and also sent to the capture host on port `exanic0:0`.
 
 
-## Toolhain Overview
+## Toolchain Overview
 
 The following figure shows an overview of the `exact-capture` toolchain used in this example.
 Details of each step are described below. 
