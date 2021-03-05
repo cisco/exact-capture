@@ -22,6 +22,7 @@ nav:
   - Exact PCAP Modify: tools/modify.md
   - Exact PCAP Match: tools/match.md
   - Exact PCAP Parse: tools/parse.md
+  - Exact PCAP Analyze: tools/analyze.md
 - Version History: versions.md
 
 markdown_extensions:
