@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 typedef struct vlan_ethhdr {
     uint64_t            h_dest : 48;
     uint64_t    	h_source : 48;
