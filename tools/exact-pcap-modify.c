@@ -29,16 +29,17 @@
 #include <stddef.h>
 #include <netinet/udp.h>
 #include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 
 #include <chaste/types/types.h>
-#include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
 #include <chaste/parsing/numeric_parser.h>
+#include <chaste/utils/util.h>
 
-#include "data_structs/pthread_vec.h"
-#include "data_structs/eiostream_vec.h"
 #include "data_structs/pcap-structures.h"
+#include "data_structs/vlan_ethhdr.h"
 
 #include "data_structs/expcap.h"
 #include "checksum.h"
@@ -82,14 +83,6 @@ typedef struct {
     uint64_t offset;
     uint64_t pkt_idx;
 } buff_t;
-
-struct vlan_ethhdr {
-    unsigned char	h_dest[ETH_ALEN];
-    unsigned char	h_source[ETH_ALEN];
-    __be16		h_vlan_proto;
-    __be16		h_vlan_TCI;
-    __be16		h_vlan_encapsulated_proto;
-};
 
 struct port_hdr {
     uint16_t src;
@@ -509,16 +502,21 @@ int main(int argc, char** argv)
     struct vlan_ethhdr old_vlan_hdr = {0};
     struct vlan_ethhdr new_vlan_hdr = {0};
     if(options.vlan){
-        if (parse_vlan_opt(options.vlan, &old_vlan_hdr.h_vlan_TCI, &new_vlan_hdr.h_vlan_TCI) == -1){
+        uint16_t old_vlan_TCI = 0;
+        uint16_t new_vlan_TCI = 0;
+        if (parse_vlan_opt(options.vlan, &old_vlan_TCI, &new_vlan_TCI) == -1){
             ch_log_fatal("Failed to parse VLAN tag: %s\n", options.vlan);
         }
         filter.bits.vlan = 1;
 
+        old_vlan_hdr.h_vlan_TCI = old_vlan_TCI;
+        new_vlan_hdr.h_vlan_TCI = new_vlan_TCI;
+
         /* If an old vlan tag was specified, proto is 8021q */
-        old_vlan_hdr.h_vlan_proto = old_vlan_hdr.h_vlan_TCI ? htobe16(ETH_P_8021Q) : htobe16(ETH_P_IP);
+        old_vlan_hdr.h_vlan_proto = old_vlan_TCI ? htobe16(ETH_P_8021Q) : htobe16(ETH_P_IP);
 
         /* If a new vlan tag was specified, proto is 8021q, encapsulate IP */
-        new_vlan_hdr.h_vlan_proto = new_vlan_hdr.h_vlan_TCI ? htobe16(ETH_P_8021Q) : htobe16(ETH_P_IP);
+        new_vlan_hdr.h_vlan_proto = new_vlan_TCI ? htobe16(ETH_P_8021Q) : htobe16(ETH_P_IP);
         new_vlan_hdr.h_vlan_encapsulated_proto = htobe16(ETH_P_IP);
     }
 
