@@ -10,7 +10,7 @@
 * Add exact-pcap-analyze utility for PCAP statistics generation (useful for performance debugging)
 * Add exact-pcap-modify utility for easy PCAP search/modify operations (useful for switch benchmarking)
 * Improve exact-pcap-extract to understand N3550-F HPT trailer format
-* Improve exact-pcap-extract to filter based on H3550-F HPT trailer format or VLAN tag header Documentation
+* Improve exact-pcap-extract to filter based on H3550-F HPT trailer format or VLAN tag header
 * Add performance optimisation and tuning guide
 * Add utility and workflow overview documentation
 * Add exact-pcap-extract detailed documentation
