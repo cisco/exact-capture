@@ -47,42 +47,40 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-                <ul>
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul class="current">
                     <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../quick/">Quick Start</a>
                     </li>
-                </ul>
-                <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href="./">Server Requirements</a>
     <ul class="current">
     </ul>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../tuning/">Performance Tuning</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../expcap/">Output Format (expcap)</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
                     </li>
                 </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
                 <ul>
-                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/analyze/">Exact PCAP Analyze</a>
                     </li>
                 </ul>
                 <ul>
@@ -109,6 +107,10 @@
     <li><a href="..">Docs</a> &raquo;</li>
     
       
+        
+          <li>Exact Capture &raquo;</li>
+        
+      
     
     <li>Server Requirements</li>
     <li class="wy-breadcrumbs-aside">
@@ -126,8 +128,8 @@ The following table describes our recommendations for the minimum system hardwar
 For general guidance, we have successfully run the system on suitably configured Dell R230 and R730 machines.
 Any of the Dell R<em>30 and R</em>40 machines are likely to be excellent candidates.</p>
 <h2 id="cpus">CPUs</h2>
-<p><h3>Core Count</h3>
-The number of CPU cores required depends on:</p>
+<h3>Core Count</h3>
+<p>The number of CPU cores required depends on:</p>
 <ol>
 <li>The number of interfaces that you wish to capture on</li>
 <li>The type and speed of the disk drives</li>
@@ -149,7 +151,6 @@ In general, we recommend disabling hyperthreads on CPUs that support them.</p>
 <p>We have had good results with Intel Xeon E5-26xx range CPUs with a 3Ghz+ clock speed. For example the Intel Xeon E5-2643.</p>
 </div>
 <h3>Speed</h3>
-
 <p>The minimum required CPU speed depends on the maximum capture rate required.
 For the purposes of this document, we assume that 10G line rate, at minimum sized (64B) frames is the capture rate requirement (i.e. approx. 14 million packets per second ).</p>
 <div class="admonition tip">

@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="canonical" href="http://exact-capture.io/tools/overview/">
+  <link rel="shortcut icon" href="../../img/favicon.ico">
+  <title>Overview - Exact Capture Documentation</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
+
+  <link rel="stylesheet" href="../../css/theme.css" />
+  <link rel="stylesheet" href="../../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Overview";
+    var mkdocs_page_input_path = "tools/overview.md";
+    var mkdocs_page_url = "/tools/overview/";
+  </script>
+  
+  <script src="../../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+        <a href="../.." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../..">Introduction</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../install/">Installation</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../quick/">Quick Start</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../server/">Server Requirements</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../config/">Configuration Guide</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../tuning/">Performance Tuning</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../expcap/">Output Format (expcap)</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../arch/">Internal Architecture</a>
+                    </li>
+                </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
+                <ul class="current">
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Overview</a>
+    <ul class="current">
+    <li class="toctree-l2"><a class="reference internal" href="#example-use-case">Example Use Case</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#toolhain-overview">Toolhain Overview</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#1-capture">1. Capture</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#2-extract">2. Extract</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#3-modify">3. Modify</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#4-match">4. Match</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#5-parse-optional">5. Parse  (optional)</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#6-analyze-optional">6. Analyze (optional)</a>
+    </li>
+    </ul>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../analyze/">Exact PCAP Analyze</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../../versions/">Version History</a>
+                    </li>
+                </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../..">Docs</a> &raquo;</li>
+    
+      
+        
+          <li>Tools &raquo;</li>
+        
+      
+    
+    <li>Overview</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="additional-tools">Additional Tools</h1>
+<p>Exact Capture ships with a number of additional tools. 
+These additional tools are designed to facilitate working with/converting <a href="../../expcap/"><code>expcap</code></a> formatted output files and to assist with performing benchmarking/performance measurement using exact-capture.
+This guide provides an overview of the tools and a detailed example use case to understand how they fit together.</p>
+<p>Following is a brief description of each tool:
+* <strong><a href="../extract/">exact-pcap-extract</a></strong> - This tool has several functions (which may all be applied at once if required): 
+  1) At runtime, exact-capture may be configured to output several <code>expcap</code> files (to maximize capture performance).<br />
+     The <code>exact-pcap-extract</code> tool can be used to <em>merge</em> all of these <code>expcap</code> files into one output file. 
+  2) Some users may prefer to work with <code>pcap</code> formatted capture files instead of <code>expcap</code> format.
+     <code>exact-pcap-extract</code> can be used to convert from <code>expcap</code> to standard <code>pcap</code> output format. 
+  3) Nexus 3550-F HPT devices can append <code>HPT</code> (High Precision Timestamping) trailers to packets. 
+     Users may want to strip these trailers and recover the timetamps into <code>expcap</code> or <code>pcap</code> format. 
+  4) Users may be interested in the analysing only specific capture ports (as stored in a VLAN header, <code>HPT</code> trailer, or <code>expcap</code> footer)
+     <code>exact-pcap-extract</code> can be used to filter packets in the input file(s) so that only a specific capture port is present in the output file. 
+  5) Users may be interested in generating a separate output file for every the capture port (as stored in a VLAN header, <code>HPT</code> trailer, or <code>expcap</code> footer) that is present in the input file(s).
+     <code>exact-pcap-extract</code> can be configured to steer packets into separate output files based on the capture port ID.</p>
+<ul>
+<li>
+<p><strong><a href="../analyze/">exact-pcap-analyze</a></strong> - This tool prints statistics about the packet rates/throughput for a given <code>pcap</code> or <code>expcap</code> capture file.
+  It is useful for "sanity checking" basic properties of a capture file before performing further analysis.</p>
+</li>
+<li>
+<p><strong><a href="../match/">exact-pcap-match</a></strong> - A common use case of is for Exact Capture is latency calculations.
+  This tool can be used to match identical frames from two <code>pcap</code> or <code>expcap</code> files and calculate the latency between them.
+  If you are measuring latency across a network device which modifies the packet on the way through, the <code>exact-pcap-modify</code> application can be used to transform packets so that they match exactly. </p>
+</li>
+<li>
+<p><strong><a href="../modify/">exact-pcap-modify</a></strong> - This tool can be used to filter and modify header values (Ethernet/IPv4/L4) in <code>pcap</code>/<code>expcap</code> files.
+  It will preserve the original timestamps and capture ports in the packets it modifies which means that it can be used to allow <code>exact-pcap-match</code> to match packets that have been modified by network device.</p>
+</li>
+<li>
+<p><strong><a href="../parse/">exact-pcap-parse</a></strong>  - This tool is useful for creating ASCII/CSV text dumps of <code>pcap</code> and <code>expcap</code> files and for working with picosecond timestamps.
+  These ASCII text dumps are easily parsable by external tooling.
+  This makes it easy to use (text based) Unix toolchains to quickly perform analysis on packet traces.</p>
+</li>
+</ul>
+<p>Source code for all of the tools can be found in the the <a href="https://github.com/exablaze-oss/exact-capture/tree/master/tools"><code>/tools</code></a> directory of the Exact-Capture source repository.
+All of the tools are installed by default and should be available with a working installation of <code>exact-capture</code>.</p>
+<h2 id="example-use-case">Example Use Case</h2>
+<p>To better understand how all of the tools fit together, consider the following example use case. 
+In this example, we want to measure the layer 3 forwarding latency performance of a Nexus 3550-T (formerly ExaLINK Triton) switch.
+In layer 3 forwarding mode, the the device receives packets, with IP address <code>1.1.1.1</code>, and forwards them to IP address <code>2.2.2.2</code>, adjusting the packet headers as it does so. 
+The measurement configuration is shown in the diagram below:</p>
+<p><img alt="Benchmarking topology" src="../../img/exact-capture-eg-topo.png" /></p>
+<p>The above diagram shows a traffic generator, connected to a Nexus 3350-F (formerly ExaLINK Fusion) HPT tap/agg switch.
+The Nexus 3550-F HPT has a layer 1 crosspoint switch internally which is used to both send packets to the timesatmping mirror (internally), and, to replicate the same packets out the Nexus 3550-T switch (which is the <em>Device Under Test</em>  or DUT).
+Timestamped packets are sent to the <code>exact-capture</code> host on port <code>exanic0:0</code>.
+Packets leaving the Nexus 3550-T are sent to the Nexus 3550-F HPT, also timestamped, and also sent to the capture host on port <code>exanic0:0</code>.</p>
+<h2 id="toolhain-overview">Toolhain Overview</h2>
+<p>The following figure shows an overview of the <code>exact-capture</code> toolchain used in this example.
+Details of each step are described below. </p>
+<p><img alt="The Exact Capture toolchain" src="../../img/exact-capture-toolchain.png" /></p>
+<h2 id="1-capture">1. Capture</h2>
+<p>The first stage required is to generate traffic and capture it with <code>exact-capture</code>.
+See the <a href="../../config/">configuration guide</a> for more information on the parameters for <code>exact-capture</code>.</p>
+<pre><code>$ exact-capture -i exanic0:0 -i -exanic1:0 -o ./0 -c 0:1:2,3 -k -S
+Exact-Capture 1.0 (00200000-00000080)
+Copyright Exablaze Pty Ltd 2018
+...
+Exact Capture finished
+    SW Received: 400011 packets ( 0.007 MP/s )
+                     30 MB      ( 0.005 Gb/s )
+       SW Wrote: 400011 packets ( 0.007 MP/s )
+                     30 MB      ( 0.005 Gb/s )
+     Lost RX/WR:      0 packets ( 0.000 MP/s )
+                      0 MB      ( 0.000 Gb/s )
+        Dropped:      0 packets ( 0.000 MP/s )
+   SW Overflows:      0 times   ( 0.000 /s   )
+</code></pre>
+<p>The Nexus 3550-F HPT appends picosecond granularity timestamps to packets arriving on two physical interfaces (which are connected to the input and the output ports on the Nexus 3550-T). 
+These timestamped packets are multiplexed together and sent to the capture host on <code>exanic0:0</code>. 
+<code>exact-capture</code> will take the packets input from <code>exanic0:0</code> and save it to <code>0.expcap</code> on the disk.
+Once the initial capture data saved on disk, we can begin to process the capture with the rest of the toolchain.</p>
+<h2 id="2-extract">2. Extract</h2>
+<p>Before any other analysis is performed, the captures produced by <code>exact-capture</code> needs to be <em>merged</em> and <em>extracted</em>. 
+In the case of this example, only one capture file is created (<code>0.expcap</code>), so no merging is necessary. 
+However, since there were two capture ports, we would like to extract packets from the trace, and steer them to different files depending on the HPT trailer port number.
+This is achieved as follows:</p>
+<pre><code>$ exact-pcap-extract -i cap0-0.expcap -i  -w 0 -W ./extracted -a -f expcap -s hpt -t
+</code></pre>
+<p>This usage will cause <code>exact-pcap-extract</code> to steer packets to separate files, depending on which port of the Nexus 3550-F HPT they arrived on.
+It allows us to cleanly separate the input and output traffic that was sent to/received from the DUT.
+After this stage, there should now be two separate files, <code>./extracted/0_0.pcap</code> and <code>./extracted/0_1.pcap</code>.</p>
+<h2 id="3-modify">3. Modify</h2>
+<p>Now that we have split the raw capture into two separate files, we would like to match packets in both traces, and derive the latency performance of the 3550-T DUT.
+However, because we're benchmarking the 3550-T in layer 3 switch mode, we know that the switch will perform transformations on the input traffic. 
+All packets with the destination IP address <code>1.1.1.1</code> will be changed to <code>2.2.2.2</code> with other fields updated accordingly.
+The <code>exact-pcap-match</code> tool will attempt to exactly match packets in both traces, so if there are any differences between the two captures passed to <code>exact-pcap-match</code> it will not be able to match these correctly.</p>
+<p>To resolve this issue, we use <code>exact-pcap-modify</code>. 
+The <code>exact-pcap-modify</code> tool can be used to intelligently modify packets in <code>pcap</code> and <code>expcap</code> capture files.
+In this example use it to modify the ingress traffic (with destination IP <code>1.1.1.1</code>) such that it identically matches the egress traffic (with destination IP <code>2.2.2.2</code>).
+You may think of this operation as performing a kind of 'zero latency', 'perfect' virtual switching operation in software.<br />
+The following example shows the command line to perform this transformation: </p>
+<pre><code>$ exact-pcap-modify -i ./extracted/0_0.expcap -w ./0_0_1.expcap -a 1.1.1.1,2.2.2.2 -f expcap
+</code></pre>
+<p>This will produce the file <code>./0_0_1.expcap</code>, where any packets in <code>./extracted/0_0.pcap</code> which had SRC IP 1.1.1.1, will now have SRC IP 2.2.2.2.</p>
+<h2 id="4-match">4. Match</h2>
+<p>Once two captures have been produced which contain matching packets, <code>exact-pcap-match</code> can be used to calcualte the latency delta between matching packets.
+It will also indicate which packets failed to match, which can be used as a test for correctness.</p>
+<pre><code>$ exact-pcap-match -r ./extracted/0_0_1.pcap -i ./0_1.pcap -c matches.csv -f expcap
+</code></pre>
+<p><code>matches.csv</code> will contain the timestamps, timestamp deltas (latency) and packet data from all packets in <code>0_1.pcap</code> which are also found in <code>0_0_1.pcap</code>.</p>
+<h2 id="5-parse-optional">5. Parse  (optional)</h2>
+<p>It is often convenient to convert packet captures to plain text. 
+This means that they can be processed by external tooling which does not need to understand the binary formats.
+The <code>exact-pcap-parse</code> utility can enable this functionality by extracting <code>pcap</code> and <code>expcap</code> traces to <code>.csv</code> files.
+It can be invoked via:</p>
+<pre><code>$ exact-pcap-parse -i ./0_0_1.pcap -c ./parsed.csv -f expcap
+</code></pre>
+<p>In the resulting <code>.csv</code> file, each packet is stored on a separate line.
+For example, this means that we can easily determine the total number of packets in the capture just by running:</p>
+<pre><code>$ wc -l ./parsed.csv
+100004
+</code></pre>
+<h2 id="6-analyze-optional">6. Analyze (optional)</h2>
+<p>Statistics other than traffic latency can be of interest when measuring the performance of a networked device.
+For this purpose, the <code>exact-pcap-analyze</code> tool can be used to print statistics such as the packet sizes, throughput, inter-frame gaps and packets per second of a given capture.
+It can be invoked via:</p>
+<pre><code>$ exact-pcap-analyze -i ./0_0_1.pcap -f expcap -r 10
+PCAP analyser, processing trace...
+...
+[1613519681.589953512]: offset=99207 window=100.001ms ipt=[7491.397ns &lt; 64252ns &lt; 3085434.147ns] size=[64B &lt; 64.000B &lt; 64B] rate=[0.000pps &lt; 0.097pps &lt; 0.133pps] 0.016Mpps 0.01Gbps
+#########################################################
+Found 100003 packets in trace &quot;./post_mod_0.pcap&quot;
+PCAP trace is 8116276549.47ns long (8116276.5495us, 8.1163s)
+Average packet rate is 12321.2904pps (0.0123Mpps)
+Packet sizes are in the range [64B,74B]
+Interfame gaps are in the range [7472.18ns,2074282148.39ns] note min IFG=0.00ns
+Packet rates are in the range [0.00pps,17548.77pps] [0.00Mpps,0.02Mpps]
+</code></pre>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../extract/" class="btn btn-neutral float-right" title="Exact PCAP Extract">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../../arch/" class="btn btn-neutral" title="Internal Architecture"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../../arch/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../extract/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '../..';</script>
+    <script src="../../js/theme.js" defer></script>
+      <script src="../../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="canonical" href="http://exact-capture.io/tools/parse/">
+  <link rel="shortcut icon" href="../../img/favicon.ico">
+  <title>Exact PCAP Parse - Exact Capture Documentation</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
+
+  <link rel="stylesheet" href="../../css/theme.css" />
+  <link rel="stylesheet" href="../../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Exact PCAP Parse";
+    var mkdocs_page_input_path = "tools/parse.md";
+    var mkdocs_page_url = "/tools/parse/";
+  </script>
+  
+  <script src="../../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+        <a href="../.." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../..">Introduction</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../install/">Installation</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../quick/">Quick Start</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../server/">Server Requirements</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../config/">Configuration Guide</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../tuning/">Performance Tuning</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../expcap/">Output Format (expcap)</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../arch/">Internal Architecture</a>
+                    </li>
+                </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
+                <ul class="current">
+                    <li class="toctree-l1"><a class="reference internal" href="../overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Exact PCAP Parse</a>
+    <ul class="current">
+    </ul>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../analyze/">Exact PCAP Analyze</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../../versions/">Version History</a>
+                    </li>
+                </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../..">Docs</a> &raquo;</li>
+    
+      
+        
+          <li>Tools &raquo;</li>
+        
+      
+    
+    <li>Exact PCAP Parse</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="exact-pcap-parse">Exact PCAP Parse</h1>
+<p>Exact PCAP Parse (<code>exact-pcap-parse</code>) is a tool used to create ASCII dumps from <code>.pcap</code> and <code>.expcap</code> files. It outputs timestamps and packet data in <code>.csv</code> files.</p>
+<p>The following table lists all commands available:</p>
+<table>
+  <tr>
+    <th>Short</th>
+    <th>Long</th>
+    <th>Default</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>i</td>
+    <td>input</td>
+    <td><em>(required)</em></td>
+    <td>
+      The input `.pcap` file to parse and dump.
+    </td>
+  </tr>
+  <tr>
+    <td>c</td>
+    <td>csv</td>
+    <td><em>(required)</em></td>
+    <td>
+      The `.csv` file to write out the dumped timestamps and packet data.
+    </td>
+  </tr>
+  <tr>
+    <td>v</td>
+    <td>verbose</td>
+    <td><em>(flag)</em></td>
+    <td>
+      Enables verbose output printing.
+    </td>
+  </tr>
+  <tr>
+    <td>f</td>
+    <td>format</td>
+    <td><em>(required)</em></td>
+    <td>
+      The input file format. Valid values are <code>pcap</code> or <code>expcap</code>.
+    </td>
+  </tr>
+  <tr>
+    <td>o</td>
+    <td>offset</td>
+    <td><em>0</em></td>
+    <td>
+      Start parsing packets from this packet offset into the input file.
+    </td>
+  </tr>
+  <tr>
+    <td>m</td>
+    <td>max</td>
+    <td><em>-1 (no limit)</em></td>
+    <td>
+      Limit the number of packets to parse.
+    </td>
+  </tr>
+  <tr>
+    <td>n</td>
+    <td>num-chars</td>
+    <td><em>64</em></td>
+    <td>
+      The number of bytes parse and output in the packet data field of the <code>.csv</code> file.
+    </td>
+  </tr>
+</table>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../analyze/" class="btn btn-neutral float-right" title="Exact PCAP Analyze">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../match/" class="btn btn-neutral" title="Exact PCAP Match"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../match/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../analyze/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '../..';</script>
+    <script src="../../js/theme.js" defer></script>
+      <script src="../../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>

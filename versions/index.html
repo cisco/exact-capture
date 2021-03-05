@@ -47,40 +47,38 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
                 <ul>
                     <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../quick/">Quick Start</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../server/">Server Requirements</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../tuning/">Performance Tuning</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../expcap/">Output Format (expcap)</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
                     </li>
                 </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
                 <ul>
-                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/analyze/">Exact PCAP Analyze</a>
                     </li>
                 </ul>
                 <ul class="current">
@@ -121,7 +119,28 @@
           <div role="main">
             <div class="section">
               
-                <h2 id="version-11">Version 1.1</h2>
+                <h2 id="version-12">Version 1.2</h2>
+<p><strong>Release date:</strong> 5 March 2021 </br>
+<strong>Commit ID:</strong> <a href="https://github.com/exablaze-oss/exact-capture/commit/fdf4d555e768d839eb8d98d66aac70ec4f34d4ad">fdf4d555e768d839eb8d98d66aac70ec4f34d4ad</a> </br>
+<strong>Source:</strong> <a href="https://github.com/exablaze-oss/exact-capture/releases/tag/v1.2">https://github.com/exablaze-oss/exact-capture/releases/tag/v1.2</a></p>
+<p><strong>Release Notes:</strong></p>
+<ul>
+<li>Moved all utilities into /tools directory</li>
+<li>Moved all utilities to a use common code-base for PCAP read/write operations</li>
+<li>Add exact-pcap-analyze utility for PCAP statistics generation (useful for performance debugging)</li>
+<li>Add exact-pcap-modify utility for easy PCAP search/modify operations (useful for switch benchmarking)</li>
+<li>Improve exact-pcap-extract to understand N3550-F HPT trailer format</li>
+<li>Improve exact-pcap-extract to filter based on H3550-F HPT trailer format or VLAN tag header Documentation</li>
+<li>Add performance optimisation and tuning guide</li>
+<li>Add utility and workflow overview documentation</li>
+<li>Add exact-pcap-extract detailed documentation</li>
+<li>Add exact-pcap-match detailed documentation</li>
+<li>Add exact-pacp-analyze detailed documentation</li>
+<li>Add exact-pcap-parse detailed documentation</li>
+<li>Add exact-pcap-modify detailed documentation</li>
+</ul>
+<hr />
+<h2 id="version-11">Version 1.1</h2>
 <p><strong>Release date:</strong> 30 September 2019 </br>
 <strong>Commit ID:</strong> <a href="https://github.com/exablaze-oss/exact-capture/commit/5d337a645987af00fc0d1afa6769ee7ccf62caea">5d337a645987af00fc0d1afa6769ee7ccf62caea</a> </br>
 <strong>Source:</strong> <a href="https://github.com/exablaze-oss/exact-capture/tree/v1.1">https://github.com/exablaze-oss/exact-capture/tree/v1.1</a></p>
@@ -150,7 +169,7 @@
     <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
       
       
-        <a href="../utils/" class="btn btn-neutral" title="Tools & Utlities"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../tools/analyze/" class="btn btn-neutral" title="Exact PCAP Analyze"><span class="icon icon-circle-arrow-left"></span> Previous</a>
       
     </div>
   
@@ -176,7 +195,7 @@
     <span class="rst-current-version" data-toggle="rst-current-version">
       
       
-        <span><a href="../utils/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+        <span><a href="../tools/analyze/" style="color: #fcfcfc;">&laquo; Previous</a></span>
       
       
     </span>

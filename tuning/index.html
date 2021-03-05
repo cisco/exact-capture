@@ -47,27 +47,18 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-                <ul>
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul class="current">
                     <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../quick/">Quick Start</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../server/">Server Requirements</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
                     </li>
-                </ul>
-                <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href="./">Performance Tuning</a>
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#getting-started">Getting started</a>
@@ -84,17 +75,24 @@
     </li>
     </ul>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../expcap/">Output Format (expcap)</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
                     </li>
                 </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
                 <ul>
-                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/analyze/">Exact PCAP Analyze</a>
                     </li>
                 </ul>
                 <ul>
@@ -120,6 +118,10 @@
   <ul class="wy-breadcrumbs">
     <li><a href="..">Docs</a> &raquo;</li>
     
+      
+        
+          <li>Exact Capture &raquo;</li>
+        
       
     
     <li>Performance Tuning</li>
@@ -156,7 +158,6 @@
         NUMA node: 1
         NUMA node: 1
 </code></pre>
-
 <p>The <code>-d</code> option when used with <code>lspci</code> allows the user to filter the devices displayed by vendor ID. Exablaze devices have the vendor ID <code>1ce4</code> and on this server where ExaDisks are in use, the NUMA node used by both the ExaNIC and ExaDisk can be queried in a single command. If ExaDisks are not in use, users should query lspci using the correct vendor ID for their own disks.</p>
 <p>Once the node of the installed hardware is known, the user should note which logical CPU cores are part of this node. This can be determined by the <code>lspcu</code> command:</p>
 <pre><code>[root@capture ~]# lscpu |grep NUMA
@@ -164,7 +165,6 @@ NUMA node(s):          2
 NUMA node0 CPU(s):     0,2,4,6,8,10
 NUMA node1 CPU(s):     1,3,5,7,9,11
 </code></pre>
-
 <p>On this system, the only cores that should be used for listen/write threads are 1,3,5,7,9,11 which are local to the same NUMA node as the hardware that will be used for packet capture.</p>
 <h2 id="cpu-configuration">CPU configuration</h2>
 <p>Ensuring that the user's CPU is correctly configured is vital to ensuring the performance of exact-capture. Any CPU cores that are used for listen/write threads should be configured as part of the <a href="https://exablaze.com/docs/exanic/user-guide/benchmarking/#kernel-boot-configuration">Kernel Boot Configuration</a> guide referenced earlier. These cores need to be specified in the <code>isolcpus</code>, <code>nohz_full</code> and <code>rcu_nocbs</code> parameters.</p>
@@ -174,7 +174,6 @@ do
     taskset -c $cpu timeout 10 dd if=/dev/zero of=/dev/null &amp;
 done
 </code></pre>
-
 <p>After doing so, check the running frequency of the selected CPU cores (our CPU has a max frequency of 3.6Ghz, per the ouput of <code>lscpu</code>):</p>
 <pre><code>for cpu in /sys/devices/system/cpu/cpu*/cpufreq
 do
@@ -182,7 +181,6 @@ do
 done
 3601078
 </code></pre>
-
 <p>This confirms that all of the CPU cores on this server will run at their max frequency, before starting exact-capture.</p>
 <h2 id="cpu-core-selection">CPU core selection</h2>
 <p>Exact-capture's <code>--cpus</code> option allows the user to select which CPU cores are allocated for management, listen and write threads (see the <a href="../config/">Configuration Guide</a> and <a href="../arch/">Internal Architecture</a> for more information). The cores chosen for listen/write threads should be configured per the <a href="#cpu-configuration">CPU configuration</a> section. The core chosen for management does not need to be isolated, but it should not be shared with the cores used for listen/write threads.</p>
@@ -200,21 +198,17 @@ done
  145:     108387      15031          0          0          0          0          0          0          0          0          0          0   PCI-MSI-edge      exanic1
 
 </code></pre>
-
 <p>Note the IRQ number in the leftmost column. On this server, CPU1 is still servicing interrupts for both NVMe storage drives and the ExaNICs (there may be other devices also raising interrupts on these cores). This will impede the performance of exact-capture, if listen threads are started on CPU0 or CPU1.</p>
 <p>Interrupt steering can be configured by setting <code>smp_affinity</code> correctly in procfs. <code>smp_affinity</code> is a bitmask which determines which CPUs can be used to service a given IRQ number, where the least significant bit corresponds to CPU0. First, force all interrupts to be serviced by CPU0:</p>
 <pre><code>echo 1 &gt; /proc/irq/default_smp_affinity
 for i in $(ls /proc/irq/); do echo 1 &gt; /proc/irq/$i/smp_affinity ; done
 </code></pre>
-
 <p>Next, allow any CPU cores not used by listener cores to service interrupts generated by the capture disks. For this server, CPU0 is used for management, CPU1 and CPU3 are used for listener threads and CPU5, CPU7, CPU9 and CPU11 are used for writer threads:</p>
 <pre><code>./bin/exact-capture --cpus 0:1,3:5,7,9,11 ...
 </code></pre>
-
 <p>In this case, the correct value for the <code>smp_affinity</code> bitmask is <code>111111110101</code>, or <code>FF5</code>. This will mask off CPU1 and CPU3 and allow interrupts to capture disks to be serviced on any core. The correct IRQ numbers can be determined from the output of <code>cat /proc/interrupts</code> as above. In this case, the capture disks have IRQ numbers 57-117. With this in mind, setting the <code>smp_affinity</code> for each IRQ number can be achieved by the following command:</p>
 <pre><code>for i in {57..117}; do echo FF5 &gt; /proc/irq/$i/smp_affinity ; done
 </code></pre>
-
 <p>The kernel documentation for <a href="https://www.kernel.org/doc/Documentation/IRQ-affinity.txt">IRQ affinity</a> offers a detailed guide for configuring <code>smp_affinity</code> values.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -246,7 +240,6 @@ Exact Capture finished
     SW Overflows:         0 times   (  0.000 /s   )
 
 </code></pre>
-
 <p>We can observe that this system is capable of writing ~36.02Gbps to the disks specified.</p>
               
             </div>

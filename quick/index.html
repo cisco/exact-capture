@@ -47,40 +47,38 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-                <ul>
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul class="current">
                     <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
                     </li>
-                </ul>
-                <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href="./">Quick Start</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../server/">Server Requirements</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../tuning/">Performance Tuning</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../expcap/">Output Format (expcap)</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
                     </li>
                 </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
                 <ul>
-                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/analyze/">Exact PCAP Analyze</a>
                     </li>
                 </ul>
                 <ul>
@@ -107,6 +105,10 @@
     <li><a href="..">Docs</a> &raquo;</li>
     
       
+        
+          <li>Exact Capture &raquo;</li>
+        
+      
     
     <li>Quick Start</li>
     <li class="wy-breadcrumbs-aside">
@@ -120,9 +122,8 @@
             <div class="section">
               
                 <p>To run Exact Capture on a single 10GbE interface, writing to a single disk slice, the following command line is sufficient:</p>
-<pre><code class="bash">$ exact-capture --input=exanic0:0 --output=/data0/ --cpus=0:1:2
+<pre><code class="language-bash">$ exact-capture --input=exanic0:0 --output=/data0/ --cpus=0:1:2
 </code></pre>
-
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Canonical Linux interface names such as “eth1” or “enp0s1” can be freely used in place of Exablaze ExaNIC device names (e.g. “exanic0:0”).
@@ -135,7 +136,7 @@ It is assumed that CPU cores have been isolated according to the System Configur
 For more details see <a href="../config/#cpus">configuration options</a></p>
 </div>
 <p>To run exact capture on a pair of 10GbE interfaces, writing to a two disk slices, using 5 cpu cores (management core = 0, NIC listener cores = 1,2, disk writer cores = 3,4):</p>
-<pre><code class="bash">$ exact-capture --input=exanic0:0 --input=exanic0:1 --output=/data0/ --output=/data1/ --cpus=0:1,2:3,4
+<pre><code class="language-bash">$ exact-capture --input=exanic0:0 --input=exanic0:1 --output=/data0/ --output=/data1/ --cpus=0:1,2:3,4
 </code></pre>
               
             </div>

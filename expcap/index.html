@@ -47,42 +47,40 @@
       </div>
 
       <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-                <ul>
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul class="current">
                     <li class="toctree-l1"><a class="reference internal" href="..">Introduction</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../install/">Installation</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../quick/">Quick Start</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../server/">Server Requirements</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../config/">Configuration Guide</a>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../tuning/">Performance Tuning</a>
                     </li>
-                </ul>
-                <ul class="current">
                     <li class="toctree-l1 current"><a class="reference internal current" href="./">Output Format (expcap)</a>
     <ul class="current">
     </ul>
                     </li>
-                </ul>
-                <ul>
                     <li class="toctree-l1"><a class="reference internal" href="../arch/">Internal Architecture</a>
                     </li>
                 </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
                 <ul>
-                    <li class="toctree-l1"><a class="reference internal" href="../utils/">Tools & Utlities</a>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/extract/">Exact PCAP Extract</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../tools/analyze/">Exact PCAP Analyze</a>
                     </li>
                 </ul>
                 <ul>
@@ -109,6 +107,10 @@
     <li><a href="..">Docs</a> &raquo;</li>
     
       
+        
+          <li>Exact Capture &raquo;</li>
+        
+      
     
     <li>Output Format (expcap)</li>
     <li class="wy-breadcrumbs-aside">
@@ -123,7 +125,7 @@
               
                 <p>Exact Capture outputs packet captures to a modified <code>pcap</code> format called <code>expcap</code>.
 The <code>expcap</code> format is a backwards compatible extension to standard <code>pcap</code> format.
-A number of <a href="../utils/">tools and utilities</a> are included for operating on these files and converting them into standard <code>pcap</code> format if necessary.</p>
+A number of <a href="../tools/overview/">tools and utilities</a> are included for operating on these files, including converting them into standard <code>pcap</code> format if necessary.</p>
 <p>For reference, standard <code>pcap</code> files are formatted as follows (more details can be found on the <a href="https://wiki.wireshark.org/Development/LibpcapFileFormat">Wireshark</a> website):</p>
 <p><img alt="PCAP file format" src="../img/exact-capture-expcap.png" /></p>
 <h2 id="padding-packets">Padding Packets</h2>
@@ -194,7 +196,7 @@ This footer contains a variety of extra fields, not available in the standard pc
     <td>CRC top</td>
     <td>16</td>    
     <td>            
-      If the new CRC flag <strong>is not</strong> set, contains the number of packets dropped between this packet and the previous packet.
+      If the new CRC flag <b>is not</b> set, contains the number of packets dropped between this packet and the previous packet.
       Otherwise this is the top 16 bits of the new CRC.
     </td>
   </tr>
@@ -202,10 +204,10 @@ This footer contains a variety of extra fields, not available in the standard pc
     <td>CRC bottom</td>
     <td>16</td>    
     <td>            
-      If the new CRC flag <strong>is</strong> set, contains the bottom 16 bits of the new CRC. Otherwise, unused.
+      If the new CRC flag <b>is</b> set, contains the bottom 16 bits of the new CRC. Otherwise, unused.
     </td>
   </tr>
-<table>
+</table>
               
             </div>
           </div>

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="canonical" href="http://exact-capture.io/tools/extract/">
+  <link rel="shortcut icon" href="../../img/favicon.ico">
+  <title>Exact PCAP Extract - Exact Capture Documentation</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700" />
+
+  <link rel="stylesheet" href="../../css/theme.css" />
+  <link rel="stylesheet" href="../../css/theme_extra.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" />
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Exact PCAP Extract";
+    var mkdocs_page_input_path = "tools/extract.md";
+    var mkdocs_page_url = "/tools/extract/";
+  </script>
+  
+  <script src="../../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+        <a href="../.." class="icon icon-home"> Exact Capture Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+                <p class="caption"><span class="caption-text">Exact Capture</span></p>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../..">Introduction</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../install/">Installation</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../quick/">Quick Start</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../server/">Server Requirements</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../config/">Configuration Guide</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../tuning/">Performance Tuning</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../expcap/">Output Format (expcap)</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../../arch/">Internal Architecture</a>
+                    </li>
+                </ul>
+                <p class="caption"><span class="caption-text">Tools</span></p>
+                <ul class="current">
+                    <li class="toctree-l1"><a class="reference internal" href="../overview/">Overview</a>
+                    </li>
+                    <li class="toctree-l1 current"><a class="reference internal current" href="./">Exact PCAP Extract</a>
+    <ul class="current">
+    </ul>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../modify/">Exact PCAP Modify</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../match/">Exact PCAP Match</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../parse/">Exact PCAP Parse</a>
+                    </li>
+                    <li class="toctree-l1"><a class="reference internal" href="../analyze/">Exact PCAP Analyze</a>
+                    </li>
+                </ul>
+                <ul>
+                    <li class="toctree-l1"><a class="reference internal" href="../../versions/">Version History</a>
+                    </li>
+                </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../..">Exact Capture Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../..">Docs</a> &raquo;</li>
+    
+      
+        
+          <li>Tools &raquo;</li>
+        
+      
+    
+    <li>Exact PCAP Extract</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="exact-extract">Exact Extract</h1>
+<p>Exact Extract is a utility that extracts packets from one or more expcap files and writes them out into a user-specified format. It outputs capture files that are 
+ordered by the expcap timestamps present in the original capture.</p>
+<pre><code class="language-bash">$ exact-pcap-extract -i cap0-0.expcap -w extracted -a -f expcap
+</code></pre>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Exact Extract can take multiple expcap files as its input. It will search for the earliest timestamp in all of the input capture files. 
+This means that the first packet written out will be the packet with the earliest timestamp across all of the input files.</p>
+</div>
+<p>The following table lists all commands available:</p>
+<table>
+  <tr>
+    <th>Short</th>
+    <th>Long</th>
+    <th>Default</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>i</td>
+    <td>input</td>
+    <td><em>(required)</em></td>
+    <td>
+        The expcap files to extract packets from.
+    </td>
+  </tr>
+  <tr>
+    <td>w</td>
+    <td>write</td>
+    <td><em>(required)</em></td>
+    <td>
+      The filename used for extracted packets. Exact Extract will automatically append .pcap to the filename.
+    </td>
+  </tr>
+  <tr>
+    <td>W</td>
+    <td>write-dir</td>
+    <td><em>(none)</em></td>
+    <td>
+      The directory used to write extracted packets. If used in conjunction with '--write', packets are extracted to {write-dir}/{write}.pcap. 
+      It must be specified if steering options (--steer) are in use.
+    </td>
+  </tr>
+  <tr>
+    <td>p</td>
+    <td>port</td>
+    <td><em>-1</em></td>
+    <td>
+      Only extract packets that were captured on the specified port number. If this is not specified and '--device' is not set, the user must use '--all' to 
+      extract packets that were captured on all ports.
+    </td>
+  </tr>
+  <tr>
+    <td>d</td>
+    <td>device</td>
+    <td><em>-1</em></td>
+    <td>
+      Only extract packets that were captured on the specified device number (i.e., 0 corresponds to exanic0). If this is not specified and '--port' is not
+      set, the user must use '--all' to extract packets that were captured on all ports.
+    </td>
+  </tr>
+  <tr>
+    <td>a</td>
+    <td>all</td>
+    <td><em>(flag)</em></td>
+    <td>
+      Extract packets that were captured on all ports and all devices. This flag must be set if neither '--port' or '--device' are specified.
+    </td>
+  </tr>
+  <tr>
+    <td>f</td>
+    <td>format</td>
+    <td><em>expcap</em></td>
+    <td>
+      The file format to use when writing out packets. Valid options are 'pcap' and 'expcap'.
+    </td>
+  </tr>
+  <tr>
+    <td>c</td>
+    <td>count</td>
+    <td><em>0 (no limit)</em></td>
+    <td>
+      The maximum number of files to write out in total.
+    </td>
+  </t>
+  <tr>
+    <td>M</td>
+    <td>maxfile</td>
+    <td><em>0 (128MB)</em></td>
+    <td>
+      The maximum file size for output files, in MB. Output files will never exceed 128MB, regardless of the value specified with this option.
+      If the output must be spread over multiple files, Exact Extract will append _n to the filename, where n is the current segment being written out
+      (starting from 1).
+    </td>
+  </t>
+  <tr>
+    <td>u</td>
+    <td>usepcap</td>
+    <td><em>(flag)</em></td>
+    <td>
+      If set, Exact Extract will write pcap timestamps in the microsecond format.
+    </td>
+  </t>
+  <tr>
+    <td>S</td>
+    <td>snaplen</td>
+    <td><em>1518</em></td>
+    <td>
+      The limit in bytes for each individual packet in the output file.
+    </td>
+  </t>
+  <tr>
+    <td>r</td>
+    <td>skip-runts</td>
+    <td><em>(flag)</em></td>
+    <td>
+      If this flag is set, runt frames will not be written to the output
+    </td>
+  </t>
+  <tr>
+    <td>D</td>
+    <td>allow-duplicates</td>
+    <td><em>(flag)</em></td>
+    <td>
+      By default, Exact Extract will write over files which have the same name as specified by '--write'. If this flag is set, it will instead create a file
+      with a duplicate name, and append __n to the duplicate file, where n is the current number of files with the same name.
+    </td>
+  </t>
+  <tr>
+    <td>t</td>
+    <td>hpt-trailer</td>
+    <td><em>(flag)</em></td>
+    <td>
+        If this flag is set, Exact Extract will assume that each packet terminates in a Fusion HPT timestamp trailer. It will extract the timestamp from this
+        trailer and write it to the pcap header (in microsecon/nanosecond format) and to the expcap trailer (in picosecond format) for all output files.
+        <br><br><strong>Note:</strong> this option assumes <strong>all</strong> packets in the input captures have Fusion HPT trailers. If this is not 
+        true, the pcap/expcap timestamp fields will contain invalid values in the output file(s).
+    </td>
+  </t>
+  <tr>
+    <td>s</td>
+    <td>steer</td>
+    <td><em>(null)</em></td>
+    <td>
+        --steer accepts one of the following values as valid options: hpt, vlan, expcap.
+        A directory must be specified when using this option (via '--write-dir')
+        If this option is set, Exact Extract will steer packets to separate files depending upon their content.
+        <br><br>
+        Specifying '--steer vlan' will cause packets to be steered to separate files depending upon their VLAN ID. For example, packets with VLAN ID 100 will
+        be steered to the file {write-dir}/{write}_vlan_100.pcap. Packets which do not have an 8021.Q tag will be written to the file named 
+        {write-dir}/{write}.pcap.
+        <br><br>
+        Specifying '--steer hpt' will cause packets to be steered to separate files depending upon their Fusion HPT trailer, using the device ID and port
+        number. For example, files with device ID 0 and port number 10 will be steered to the file {write-dir}/{write}_device_0_port_10.pcap.
+        <br><strong>Note:</strong> use of this option assumes that <strong>all</strong> packets in the input file(s) have a Fusion HPT trailer.
+        <br><br>
+        Specifying '--steer expcap' will cause packets to be steered to separate files depending upon their expcap footer, using the device ID and port
+        number. For example, files with device ID 0 and port number 10 will be steered to the file {write-dir}/{write}_device_0_port_10.pcap.
+        <br><strong>Note:</strong> use of this option assumes that <strong>all</strong> packets in the input file(s) have an expcap footer.
+    </td>
+  </t>
+</table>
+
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Depending upon the options specified by, Exact Extract may attempt to keep more files open simultaneously than is allowed the OS. 
+If it is unable to override this limit, it will need to close and open outputs each time a packet is written in order to ensure that it does not exceed this limit. 
+This can degrade the performance of Exact Extract, due to the additional overhead of repeatedly opening and closing output files.</p>
+</div>
+<p>On Linux, it is possible to override the number of open file descriptors limit by giving Exact Extract the "CAP_SYS_RESOURCE" capability to the binary. 
+This can be accomplished by running:</p>
+<pre><code>$ sudo setcap cap_sys_resouce+ep exact-pcap-extract
+</code></pre>
+<p>The full list of permissions granted by CAP_SYS_RESOURCE is available on the <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html">capabilities(7)</a>
+man page. Granting Exact Extract this permission should improve its performance, however it is not a requirement. Users will receive the warning "Could not 
+raise the limit on concurrently open files" if they are exceeding the open file limit.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../modify/" class="btn btn-neutral float-right" title="Exact PCAP Modify">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../overview/" class="btn btn-neutral" title="Overview"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="versions">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../overview/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../modify/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '../..';</script>
+    <script src="../../js/theme.js" defer></script>
+      <script src="../../search/main.js" defer></script>
+    <script defer>
+        window.onload = function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        };
+    </script>
+
+</body>
+</html>
