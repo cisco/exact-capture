@@ -19,13 +19,11 @@
 #include <errno.h>
 
 #include <chaste/types/types.h>
-#include <chaste/data_structs/vector/vector_std.h>
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
+#include <chaste/utils/util.h>
 
-#include "data_structs/eiostream_vec.h"
 #include "data_structs/pcap_buff.h"
-
 #include "data_structs/expcap.h"
 
 
@@ -54,30 +52,6 @@ void signal_handler(int signum)
     }
     stop = 1;
 }
-
-
-int read_expect(int fd, void* buff, ssize_t len, int64_t* offset)
-{
-
-    ssize_t total_bytes = 0;
-
-    do{
-        ch_log_debug1("Trying to read %liB\n", len);
-        ssize_t bytes = read(fd, (char*)buff + total_bytes, len - total_bytes);
-        if(bytes == 0){
-            ch_log_error("Reached end of file\n");
-            return 1;
-        }
-        total_bytes += bytes;
-
-    }
-    while(total_bytes < len);
-
-    *offset += total_bytes;
-
-    return 0;
-}
-
 
 
 void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
@@ -119,45 +93,6 @@ void dprint_packet(int fd, bool expcap, pcap_pkthdr_t* pkt_hdr, char* packet,
     }
 }
 
-
-
-int read_packet(int fd, int64_t* offset, int64_t snaplen, pcap_pkthdr_t* pkt_hdr, char* pbuf )
-{
-
-    if(read_expect(fd, pkt_hdr, sizeof(pcap_pkthdr_t), offset)){
-        return 1;
-        //ch_log_fatal("Could not read enough bytes from %s at offset %li, (%li required)\n", options.input, offset, sizeof(pkt_hdr));
-    }
-
-    bool error = false;
-    snaplen = 4096;
-    if(pkt_hdr->caplen > snaplen){
-        ch_log_error("Error, packet length out of range [0,%li] %u at offset=%li\n", snaplen, pkt_hdr->len, offset);
-        error = true;
-    }
-
-    if(options.verbose && (pkt_hdr->len == 0 || pkt_hdr->len + sizeof(expcap_pktftr_t) < pkt_hdr->caplen)){
-        ch_log_warn("Warning: packet len %li < capture len %li\n", pkt_hdr->len, pkt_hdr->caplen);
-    }
-
-
-    if(error){
-        read_expect(fd, pbuf, 4096, offset);
-        hexdump(&pkt_hdr, sizeof(pkt_hdr));
-        hexdump(pbuf, 4096);
-        exit(0);
-    }
-
-    if(read_expect(fd, pbuf, pkt_hdr->caplen, offset)){
-        return 1;
-    }
-
-    return 0;
-
-}
-
-
-
 int main(int argc, char** argv)
 {
     signal(SIGHUP, signal_handler);
@@ -197,7 +132,7 @@ int main(int argc, char** argv)
     }
 
     ch_log_info("Starting PCAP parser...\n");
-    pcap_buff_t buff;
+    pcap_buff_t buff = {0};
     if(pcap_buff_from_file(&buff, options.input) != BUFF_ENONE){
         ch_log_fatal("Failed to create a new pcap buff from file: %s\n", options.input);
     }

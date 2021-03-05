@@ -25,12 +25,11 @@
 #include <chaste/data_structs/hash_map/hash_map.h>
 #include <chaste/options/options.h>
 #include <chaste/log/log.h>
+#include <chaste/utils/util.h>
 
-#include "data_structs/pthread_vec.h"
-#include "data_structs/eiostream_vec.h"
-#include "data_structs/pcap-structures.h"
-
-#include "data_structs/expcap.h"
+#include "../src/data_structs/pcap-structures.h"
+#include "../src/data_structs/expcap.h"
+#include "data_structs/pcap_buff.h"
 
 USE_CH_LOGGER_DEFAULT;
 USE_CH_OPTIONS;
@@ -67,33 +66,6 @@ void signal_handler (int signum)
         ch_log_fatal("Hard exit\n");
     }
     stop = 1;
-}
-
-int read_expect (int fd, void* buff, ssize_t len, int64_t* offset, bool debug)
-{
-    ssize_t total_bytes = 0;
-
-    do
-    {
-        if (debug)
-        {
-            ch_log_debug1("Trying to read %liB on fd=%li\n", len, fd);
-        };
-        ssize_t bytes = read (fd, (char*) buff + total_bytes,
-                              len - total_bytes);
-        if (bytes == 0)
-        {
-            ch_log_error("Reached end of file\n");
-            return 1;
-        }
-        total_bytes += bytes;
-
-    }
-    while (total_bytes < len);
-
-    *offset += total_bytes;
-
-    return 0;
 }
 
 void dprint_packet (int fd, bool expcap, pcap_pkthdr_t* pkt_hdr,
@@ -172,7 +144,6 @@ int snprint_packet (char* out, int max, bool expcap, pcap_pkthdr_t* pkt_hdr,
 int main (int argc, char** argv)
 {
     ch_word result = -1;
-    int64_t offset = 0;
 
     signal (SIGHUP, signal_handler);
     signal (SIGINT, signal_handler);
@@ -196,281 +167,176 @@ int main (int argc, char** argv)
     ch_log_info("Starting PCAP Matcher\n");
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
-
-    int fd_ref = open (options.ref, O_RDONLY);
-    if (fd_ref < 0)
-    {
-        ch_log_fatal("Could not open reference PCAP %s (%s)\n", options.ref,
-                     strerror(errno));
-    }
-
-    int fd_inp = open (options.input, O_RDONLY);
-    if (fd_inp < 0)
-    {
-        ch_log_fatal("Could not open input PCAP %s (%s)\n", options.input,
-                     strerror(errno));
-    }
-
+    
     int fd_out = open (options.csv, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd_out < 0)
-    {
+    if (fd_out < 0){
         ch_log_fatal("Could not open output csv %s (%s)\n", options.csv,
                      strerror(errno));
     }
 
     int fd_inp_miss = -1;
-    if (options.inp_missed)
-    {
-        fd_inp_miss = open (options.inp_missed, O_WRONLY | O_CREAT | O_TRUNC,
-                            0666);
-        if (fd_inp_miss < 0)
-        {
+    if (options.inp_missed){
+        fd_inp_miss = open (options.inp_missed, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd_inp_miss < 0){
             ch_log_fatal("Could not open input missed file %s (%s)\n",
                          options.csv, strerror(errno));
         }
     }
 
     int fd_ref_miss = -1;
-    if (options.ref_missed)
-    {
-        fd_ref_miss = open (options.ref_missed, O_WRONLY | O_CREAT | O_TRUNC,
-                            0666);
-        if (fd_ref_miss < 0)
-        {
+    if (options.ref_missed){
+        fd_ref_miss = open (options.ref_missed, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+        if (fd_ref_miss < 0){
             ch_log_fatal("Could not open reference missed file %s (%s)\n",
                          options.csv, strerror(errno));
         }
     }
 
     bool expcap = false;
-    if (strncmp (options.format, "pcap", strlen ("pcap")) == 0)
-    {
+    if (strncmp (options.format, "pcap", strlen ("pcap")) == 0){
         expcap = false;
     }
-    else if (strncmp (options.format, "expcap", strlen ("expcap")) == 0)
-    {
+    else if (strncmp (options.format, "expcap", strlen ("expcap")) == 0){
         expcap = true;
     }
-    else
-    {
+    else{
         ch_log_fatal(
                 "Unkown format type =\"%s\". Must be \"pcap\" or \"expcap\"\n",
                 options.format);
     }
 
-    if (options.max_ref < 0)
-    {
+    if (options.max_ref < 0){
         options.max_ref = INT64_MAX;
     }
 
-    if (options.max_inp < 0)
-    {
+    if (options.max_inp < 0){
         options.max_inp = INT64_MAX;
-    }
-
-    pcap_file_header_t fhdr_ref;
-    if (read_expect (fd_ref, &fhdr_ref, sizeof(pcap_file_header_t), &offset,
-                     false))
-    {
-        ch_log_fatal(
-                "Could not read enough bytes from %s at offset %li, (%li required)\n",
-                options.input, offset, sizeof(pcap_file_header_t));
-    }
-
-    char* magic_str =
-            fhdr_ref.magic == NSEC_TCPDUMP_MAGIC ?
-                    "Nansec TCP Dump" : "UNKNOWN";
-    magic_str = fhdr_ref.magic == TCPDUMP_MAGIC ? "TCP Dump" : magic_str;
-    if (options.verbose)
-    {
-        printf ("Magic    0x%08x (%i) (%s)\n", fhdr_ref.magic, fhdr_ref.magic, magic_str);
-        printf ("Ver Maj  0x%04x (%i)\n", fhdr_ref.version_major, fhdr_ref.version_major);
-        printf ("Ver Min  0x%04x (%i)\n", fhdr_ref.version_minor, fhdr_ref.version_minor);
-        printf ("Thiszone 0x%08x (%i)\n", fhdr_ref.thiszone, fhdr_ref.thiszone);
-        printf ("SigFigs  0x%08x (%i)\n", fhdr_ref.sigfigs, fhdr_ref.sigfigs);
-        printf ("Snap Len 0x%08x (%i)\n", fhdr_ref.snaplen, fhdr_ref.snaplen);
-        printf ("Link typ 0x%08x (%i)\n", fhdr_ref.linktype, fhdr_ref.linktype);
     }
 
     ch_hash_map* hmap = ch_hash_map_new (128 * 1024 * 1024, sizeof(value_t),
                                          NULL);
 
-    ch_log_info("Loading reference file %s...\n", options.ref);
-
     /* Load up the reference file into the hashmap*/
+    pcap_buff_t ref_buff = {0};
+    ch_log_info("Loading reference file %s...\n", options.ref);
+    if(pcap_buff_from_file(&ref_buff, options.ref) != BUFF_ENONE){
+        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.ref);
+    }
+
     int64_t pkt_num = 0;
     int64_t loaded = 0;
-    for (pkt_num = 0; !stop && pkt_num < options.max_ref + options.offset_ref;
-            pkt_num++)
-    {
-        if (pkt_num && pkt_num % (1000 * 1000) == 0)
-        {
+    for (pkt_num = 0; !stop && pkt_num < options.max_ref + options.offset_ref; pkt_num++){
+        if (pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Loaded %li,000,000 packets\n", pkt_num / 1000 / 1000);
         }
 
-        pcap_pkthdr_t pkt_hdr;
-        if (read_expect (fd_ref, &pkt_hdr, sizeof(pkt_hdr), &offset, false))
-        {
-            ch_log_error(
-                    "Could not read enough bytes from %s at offset %li, (%li required)\n",
-                    options.input, offset, sizeof(pkt_hdr));
+        pkt_info_t pkt_info;
+        pkt_info = pcap_buff_next_packet(&ref_buff);
+        pcap_pkthdr_t* ref_hdr = ref_buff.hdr;
+        switch(pkt_info){
+        case PKT_EOF:
+            goto ref_pcap_loaded;
+        case PKT_OVER_SNAPLEN:
+            ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, ref_buff.snaplen, ref_buff.hdr->len);
+            break;
+        case PKT_SNAPPED:
+            if(options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", ref_hdr->caplen, ref_hdr->len);
+            }
+            break;
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.ref);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
             break;
         }
 
-        if (pkt_hdr.caplen > fhdr_ref.snaplen || pkt_hdr.caplen < 64)
-        {
-            ch_log_error(
-                    "Error, packet length (%li) out of range [64,%li] %u offset=%li\n",
-                    pkt_hdr.caplen, fhdr_ref.snaplen, offset);
-        }
-
-        if (options.verbose && pkt_num >= options.offset_ref
-                && (pkt_hdr.len + sizeof(expcap_pktftr_t) < pkt_hdr.caplen))
-        {
-            ch_log_warn("Warning: packet len %li < capture len %li\n",
-                        pkt_hdr.len, pkt_hdr.caplen);
-        }
-
-        char pbuf[1024 * 64] = { 0 };
-        if (read_expect (fd_ref, &pbuf, pkt_hdr.caplen, &offset, false))
-        {
-            break;
-        }
-
-        expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*) (pbuf + pkt_hdr.caplen
-                - sizeof(expcap_pktftr_t));
-
-        if (pkt_num < options.offset_ref)
-        {
+        if (pkt_num < options.offset_ref){
             //Skip over packets in the reference file
             continue;
         }
 
-        if (options.verbose)
-        {
+        if (options.verbose){
             dprintf (STDOUT_FILENO, "ref,");
-            dprint_packet (STDOUT_FILENO, expcap, &pkt_hdr, pkt_ftr, pbuf, true,
-                           true);
+            dprint_packet (STDOUT_FILENO, expcap, ref_hdr, ref_buff.ftr, ref_buff.pkt, true, true);
         }
 
         value_t val;
         bzero (&val, sizeof(val));
-        val.pkt_hdr = pkt_hdr;
-        if (expcap)
-        {
-            val.pkt_ftr = *pkt_ftr;
+        val.pkt_hdr = *ref_hdr;
+        if (expcap){
+            val.pkt_ftr = *ref_buff.ftr;
         }
 
-        const int64_t caplen =
-                expcap ?
-                        pkt_hdr.caplen - sizeof(expcap_pktftr_t) :
-                        pkt_hdr.caplen;
-
+        const int64_t caplen = expcap ? ref_hdr->caplen - sizeof(expcap_pktftr_t) : ref_hdr->caplen;
+        
         /*Use the whole packet as the key, and the header as the value */
-        hash_map_push (hmap, pbuf, caplen, &val);
+        hash_map_push (hmap, ref_buff.pkt, caplen, &val);
 
         loaded++;
-
     }
+
+ref_pcap_loaded:
+
     ch_log_info("Loaded %li entries from reference file %s...\n", pkt_num,
-                options.input);
+                options.ref);
 
     ch_log_info("Loading input file %s...\n", options.input);
-
-    pcap_file_header_t fhdr_inp;
-    if (read_expect (fd_inp, &fhdr_inp, sizeof(fhdr_inp), &offset, true))
-    {
-        ch_log_fatal(
-                "Could not read enough bytes from %s at offset %li, (%li required)\n",
-                options.input, offset, sizeof(pcap_file_header_t));
+    pcap_buff_t inp_buff = {0};
+    if(pcap_buff_from_file(&inp_buff, options.input) != BUFF_ENONE){
+        ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.input);
     }
 
-    char* magic_str_inp =
-            fhdr_inp.magic == NSEC_TCPDUMP_MAGIC ?
-                    "Nansec TCP Dump" : "UNKNOWN";
-    magic_str = fhdr_inp.magic == TCPDUMP_MAGIC ? "TCP Dump" : magic_str_inp;
-    if (options.verbose)
-    {
-        printf ("Magic    0x%08x (%i) (%s)\n", fhdr_inp.magic, fhdr_inp.magic, magic_str);
-        printf ("Ver Maj  0x%04x (%i)\n", fhdr_inp.version_major,fhdr_inp.version_major);
-        printf ("Ver Min  0x%04x (%i)\n", fhdr_inp.version_minor, fhdr_inp.version_minor);
-        printf ("Thiszone 0x%08x (%i)\n", fhdr_inp.thiszone, fhdr_inp.thiszone);
-        printf ("SigFigs  0x%08x (%i)\n", fhdr_inp.sigfigs, fhdr_inp.sigfigs);
-        printf ("Snap Len 0x%08x (%i)\n", fhdr_inp.snaplen, fhdr_inp.snaplen);
-        printf ("Link typ 0x%08x (%i)\n", fhdr_inp.linktype, fhdr_inp.linktype);
-    }
-
-    offset = 0;
     int64_t total_matched = 0;
     int64_t total_lost = 0;
     for (pkt_num = 0; !stop && pkt_num < options.max_inp + options.offset_ref;
-            pkt_num++)
-    {
-
-        if (pkt_num && pkt_num % (1000 * 1000) == 0)
-        {
-            ch_log_info("Processed %li,000,000 packets\n",
-                        pkt_num / 1000 / 1000);
+            pkt_num++){
+        if (pkt_num && pkt_num % (1000 * 1000) == 0){
+            ch_log_info("Processed %li,000,000 packets\n", pkt_num / 1000 / 1000);
         }
 
-        pcap_pkthdr_t pkt_hdr;
-        if (read_expect (fd_inp, &pkt_hdr, sizeof(pkt_hdr), &offset, true))
-        {
-            ch_log_error(
-                    "Could not read enough bytes from %s at offset %li, (%li required)\n",
-                    options.input, offset, sizeof(pkt_hdr));
-            ch_log_error("Ending now\n");
+        pkt_info_t pkt_info;
+        pkt_info = pcap_buff_next_packet(&inp_buff);
+        pcap_pkthdr_t *inp_hdr = inp_buff.hdr;
+
+        switch(pkt_info){
+        case PKT_EOF:
+            goto find_input_misses;
+        case PKT_OVER_SNAPLEN:
+            ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, inp_buff.snaplen, inp_buff.hdr->len);
+            break;
+        case PKT_SNAPPED:
+            if (options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", inp_hdr->len, inp_hdr->caplen);
+            }
+            break;
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.input);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
             break;
         }
 
-        if (pkt_hdr.caplen > fhdr_ref.snaplen || pkt_hdr.caplen < 64)
-        {
-            ch_log_error(
-                    "Error, packet length (%li) out of range [64,%li] %u offset=%li\n",
-                    pkt_hdr.caplen, fhdr_inp.snaplen, offset);
-        }
-
-        if (options.verbose && pkt_num >= options.offset_inp
-                && (pkt_hdr.len + sizeof(expcap_pktftr_t) < pkt_hdr.caplen))
-        {
-            ch_log_warn("Warning: packet len %li < capture len %li\n",
-                        pkt_hdr.len, pkt_hdr.caplen);
-        }
-
-        char pbuf[1024 * 64] = { 0 };
-        if (read_expect (fd_inp, &pbuf, pkt_hdr.caplen, &offset, true))
-        {
-            break;
-        }
-
-        if (pkt_num < options.offset_inp)
-        {
+        if (pkt_num < options.offset_inp){
             continue;
         }
 
-        expcap_pktftr_t* pkt_ftr = (expcap_pktftr_t*) (pbuf + pkt_hdr.caplen
-                - sizeof(expcap_pktftr_t));
-
-        if (options.verbose && pkt_num)
-        {
+        if (options.verbose && pkt_num){
             dprintf (STDOUT_FILENO, "inp,");
-            dprint_packet (STDOUT_FILENO, expcap, &pkt_hdr, pkt_ftr, pbuf, true,
-                           true);
+            dprint_packet (STDOUT_FILENO, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, true, true);
         }
 
         /* Look for this packet in the hash map */
-
-        const int64_t caplen =
-                expcap ?
-                        pkt_hdr.caplen - sizeof(expcap_pktftr_t) :
-                        pkt_hdr.caplen;
-        ch_hash_map_it hmit = hash_map_get_first (hmap, pbuf, caplen);
-        if (!hmit.key)
-        {
+        const int64_t caplen = expcap ? inp_hdr->caplen - sizeof(expcap_pktftr_t) : inp_hdr->caplen;
+        ch_hash_map_it hmit = hash_map_get_first (hmap, inp_buff.pkt, caplen);
+        if (!hmit.key){
             total_lost++;
             if (fd_inp_miss > 0)
-                dprint_packet (fd_inp_miss, expcap, &pkt_hdr, pkt_ftr, pbuf,
-                               true, true);
+                dprint_packet (fd_inp_miss, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, true, true);
             continue;
         }
 
@@ -489,72 +355,64 @@ int main (int argc, char** argv)
 #define OSTRMAX 4096
         char matches[OSTRMAX] = { 0 };
         int n = 0;
-        n += snprint_packet (matches + n, OSTRMAX - n, expcap, &pkt_hdr,
-                             pkt_ftr, pbuf, false, true);
+        n += snprint_packet (matches + n, OSTRMAX - n, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, false, true);
         n += snprintf (matches + n, OSTRMAX - n, ",-->,");
         for (; hmit.key && hmit.value && n < OSTRMAX;
-                hmit = hash_map_get_next (hmit))
-        {
+                hmit = hash_map_get_next (hmit)){
 
             matching_keys++;
 
             int64_t secs_delta = (int64_t) ref_hdr->ts.ns.ts_sec
-                    - (int64_t) pkt_hdr.ts.ns.ts_sec;
+                    - (int64_t) inp_hdr->ts.ns.ts_sec;
             int64_t necs_delta = (int64_t) ref_hdr->ts.ns.ts_nsec
-                    - (int64_t) pkt_hdr.ts.ns.ts_nsec;
+                    - (int64_t) inp_hdr->ts.ns.ts_nsec;
             int64_t delta_ns = secs_delta * (1000 * 1000 * 1000ULL)
                     + necs_delta;
 
             int64_t delta_ps = 0;
 
-            if (expcap)
-            {
+            if (expcap){
                 int64_t secs_delta = (int64_t) ref_ftr->ts_secs
-                        - (int64_t) pkt_ftr->ts_secs;
+                        - (int64_t) inp_buff.ftr->ts_secs;
                 int64_t psecs_delta = (int64_t) ref_ftr->ts_psecs
-                        - (int64_t) pkt_ftr->ts_psecs;
+                        - (int64_t) inp_buff.ftr->ts_psecs;
                 delta_ps = secs_delta * (1000 * 1000 * 1000 * 1000ULL)
                         + psecs_delta;
             }
 
             const uint64_t new_min_lat_ns = MIN(llabs (lat_ns),
                                                 llabs (delta_ns));
-            if ((uint64_t) llabs (lat_ns) != new_min_lat_ns)
-            {
+            if ((uint64_t) llabs (lat_ns) != new_min_lat_ns){
                 lat_ns = delta_ns;
                 lat_ps = delta_ps;
             }
 
-            n += snprint_packet (matches + n, OSTRMAX - n, expcap, ref_hdr,
-                                 ref_ftr, ref_pkt, false, false);
+            n += snprint_packet (matches + n, OSTRMAX - n, expcap, ref_hdr, ref_ftr, ref_pkt, false, false);
             n += snprintf (matches + n, OSTRMAX - n, ",");
-
         }
 
-        if (expcap)
-        {
+        if (expcap){
             dprintf (fd_out, "%li,%li,%li,%s\n", lat_ns, lat_ps, matching_keys,
                      matches);
         }
-        else
-        {
+        else{
             dprintf (fd_out, "%li,%li,%s\n", lat_ns, matching_keys, matches);
         }
 
     }
 
+find_input_misses:
+
     ch_log_info("Finding all elements missing in input\n");
     ch_hash_map_it hmit = hash_map_first (hmap);
     int64_t missing_input = 0;
-    while (hmit.key)
-    {
+    while (hmit.key){
         value_t* val = (value_t*) hmit.value;
-        if (!val->matched_once)
-        {
+        if (!val->matched_once){
             missing_input++;
-            if (fd_ref_miss > 0)
-                dprint_packet (fd_ref_miss, expcap, &val->pkt_hdr,
-                               &val->pkt_ftr, hmit.key, true, true);
+            if (fd_ref_miss > 0){
+                dprint_packet (fd_ref_miss, expcap, &val->pkt_hdr, &val->pkt_ftr, hmit.key, true, true);
+            }
         }
 
         hash_map_next (hmap, &hmit);
@@ -565,10 +423,15 @@ int main (int argc, char** argv)
     ch_log_info("%-12li packets from input file never found in reference file\n", total_lost);
     ch_log_info("%-12li packets in reference were never matched with input\n\n", missing_input);
 
-    close (fd_ref);
-    close (fd_out);
-    if (fd_inp_miss > 0) close (fd_inp_miss);
-    if (fd_ref_miss > 0) close (fd_ref_miss);
+    pcap_buff_close(&ref_buff);
+    pcap_buff_close(&inp_buff);
+
+    if (fd_inp_miss > 0){
+        close (fd_inp_miss);
+    }
+    if (fd_ref_miss > 0){
+        close (fd_ref_miss);
+    }
 
     ch_log_info("PCAP matcher, finished\n");
     return result;

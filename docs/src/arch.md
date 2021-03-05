@@ -9,5 +9,4 @@ These basic architectural components are illustrated below, with the addition of
 The head of each column highlights the performance limiting resource for that component:
 
 ![Exact Capture Architecture](img/exact-capture-arch.png)
-
-_This page was last updated on ._                              
+           

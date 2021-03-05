@@ -3,7 +3,7 @@
 Exact Extract is a utility that extracts packets from one or more expcap files and writes them out into a user-specified format. It outputs capture files that are 
 ordered by the expcap timestamps present in the original capture.
     
-```
+```bash
 $ exact-pcap-extract -i cap0-0.expcap -w extracted -a -f expcap
 ```
 
