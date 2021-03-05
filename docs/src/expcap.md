@@ -1,6 +1,6 @@
 Exact Capture outputs packet captures to a modified `pcap` format called `expcap`.
 The `expcap` format is a backwards compatible extension to standard `pcap` format.
-A number of [tools and utilities](utils.md) are included for operating on these files and converting them into standard `pcap` format if necessary.
+A number of [tools and utilities](tools/overview.md) are included for operating on these files, including converting them into standard `pcap` format if necessary.
 
 For reference, standard `pcap` files are formatted as follows (more details can be found on the [Wireshark](https://wiki.wireshark.org/Development/LibpcapFileFormat) website):
 
@@ -85,7 +85,7 @@ The additional expcap footer fields are described in detail in the table below. 
     <td>CRC top</td>
     <td>16</td>    
     <td>            
-      If the new CRC flag <strong>is not</strong> set, contains the number of packets dropped between this packet and the previous packet.
+      If the new CRC flag <b>is not</b> set, contains the number of packets dropped between this packet and the previous packet.
       Otherwise this is the top 16 bits of the new CRC.
     </td>
   </tr>
@@ -93,7 +93,7 @@ The additional expcap footer fields are described in detail in the table below. 
     <td>CRC bottom</td>
     <td>16</td>    
     <td>            
-      If the new CRC flag <strong>is</strong> set, contains the bottom 16 bits of the new CRC. Otherwise, unused.
+      If the new CRC flag <b>is</b> set, contains the bottom 16 bits of the new CRC. Otherwise, unused.
     </td>
   </tr>
-<table>
+</table>
