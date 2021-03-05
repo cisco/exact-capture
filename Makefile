@@ -34,16 +34,16 @@ bin/exact-pcap-parse: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(EXACTC
 	mkdir -p bin
 	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(LDFLAGS) -o $@
 
-bin/exact-pcap-match: tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
+bin/exact-pcap-match: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	mkdir -p bin
-	$(CC) $(CFLAGS) tools/exact-pcap-match.c $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-match.c $(LDFLAGS) -o $@
 
 bin/exact-pcap-extract: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(LDFLAGS) -o $@
 
 bin/exact-pcap-analyze: tools/exact-pcap-analyze.c tools/utils.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) tools/exact-pcap-analyze.c tools/utils.c $(LDFLAGS) -lexanic -o $@
-  
+
 bin/exact-pcap-modify: tools/exact-pcap-modify.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) tools/exact-pcap-modify.c $(LDFLAGS) -o $@
 

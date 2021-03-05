@@ -42,7 +42,7 @@ buff_error_t pcap_buff_init(char* filename, int64_t snaplen, int64_t max_filesiz
 
 buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename)
 {
-    BUFF_TRY(buff_init_from_file(&pcap_buff->_buff, filename));
+    BUFF_TRY(buff_init_from_file(&pcap_buff->_buff, filename, sizeof(pcap_file_header_t)));
     return BUFF_ENONE;
 }
 
@@ -89,6 +89,15 @@ pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff)
         (pcap_buff->ftr->flags & EXPCAP_FLAG_SWOVFL)){
 
         return PKT_ERROR;
+    }
+
+    pcap_file_header_t* hdr = (pcap_file_header_t*)buff->file_header;
+    if(pcap_buff->hdr->len > hdr->snaplen){
+        return PKT_OVER_SNAPLEN;
+    }
+
+    if(pcap_buff->hdr->len > pcap_buff->hdr->caplen){
+        return PKT_SNAPPED;
     }
 
     return PKT_OK;
@@ -150,4 +159,23 @@ buff_error_t pcap_buff_write(pcap_buff_t* pcap_buff, pcap_pkthdr_t* hdr, char* d
     }
 
     return BUFF_ENONE;
+}
+
+buff_error_t pcap_buff_close(pcap_buff_t* pcap_buff){
+    return buff_close(pcap_buff->_buff);
+}
+
+static const char* pkt_infolist[] = {
+    "Packet OK.",                                                     // PKT_OK
+    "Packet is expcap padding.",                                      // PKT_PADDING
+    "Packet is a runt (len < 64B).",                                  // PKT_RUNT
+    "Packet contains an error.",                                      // PKT_ERROR
+    "No more packets left in this buffer. ",                          // PKT_EOF
+    "Packet length exceeds the pcap file's snaplen.",                 // PKT_OVER_SNAPLEN
+    "Packet data length is less than the length on disk.",            // PKT_BAD_LEN
+    "Packet has been snapped to less than it's length on the wire."   // PKT_SNAPPED
+};
+
+const char* pcap_buff_strinfo(pkt_info_t info){
+    return pkt_infolist[info];
 }
