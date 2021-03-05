@@ -31,6 +31,7 @@
 #include <chaste/log/log.h>
 
 #include "data_structs/pcap-structures.h"
+#include "data_structs/pcap_buff.h"
 #include "data_structs/expcap.h"
 #include "utils.h"
 
@@ -85,86 +86,6 @@ void signal_handler(int signum)
     stop = 1;
 }
 
-#define EOF_NORMAL 1
-#define EOF_UNEXPECT 2
-
-int read_expect(int fd, void* buff, ssize_t len, int64_t* offset)
-{
-
-    ssize_t total_bytes = 0;
-
-    do{
-        ch_log_debug1("Trying to read %liB\n", len);
-        ssize_t bytes = read(fd, (char*)buff + total_bytes, len - total_bytes);
-        total_bytes += bytes;
-
-        if(bytes == 0 && total_bytes < len){
-            if(total_bytes ){
-                ch_log_warn("Expecting %li bytes, but read %li and reached end of file\n", len, total_bytes);
-                return EOF_UNEXPECT;
-            }
-            ch_log_debug1("Reached end of file\n");
-            return EOF_NORMAL;
-        }
-    }
-    while(total_bytes < len);
-
-    *offset += total_bytes;
-
-    return 0;
-}
-
-
-int read_packet(char* data, int64_t* offset, int64_t snaplen, pcap_pkthdr_t** pkt_hdro, char** pbufo,
-        bool expcap, expcap_pktftr_t** pkt_ftr, timespecps_t* tsps )
-{
-
-    pcap_pkthdr_t* pkt_hdr = (pcap_pkthdr_t*)(data + *offset);
-    *offset += sizeof(pcap_pkthdr_t);
-
-    bool error = false;
-    snaplen = 4096;
-    if(pkt_hdr->caplen > snaplen){
-        ch_log_error("Error, packet length out of range [0,%li] %u at offset=%li\n", snaplen, pkt_hdr->len, offset);
-        error = true;
-    }
-
-    if(options.verbose && (pkt_hdr->len != 0 && pkt_hdr->len + sizeof(expcap_pktftr_t) < pkt_hdr->caplen)){
-        ch_log_warn("Warning: packet len %li < capture len %li\n", pkt_hdr->len, pkt_hdr->caplen);
-    }
-
-    if(error){
-        char* pbuf = data + *offset;
-        hexdump(pkt_hdr, sizeof(pkt_hdr));
-        hexdump(pbuf, 4096);
-        return EOF_UNEXPECT;
-    }
-
-    char* pbuf = data + *offset;
-    *offset += pkt_hdr->caplen;
-
-    if(expcap){
-        *pkt_ftr = (expcap_pktftr_t*)(pbuf + pkt_hdr->caplen - sizeof(expcap_pktftr_t));
-        const int64_t secs  = (*pkt_ftr)->ts_secs;
-        const int64_t psecs = (*pkt_ftr)->ts_psecs;
-        tsps->tv_sec  = secs;
-        tsps->tv_psec = psecs;
-    }
-    else{
-        const int64_t secs  = pkt_hdr->ts.ns.ts_sec;
-        const int64_t nsecs = pkt_hdr->ts.ns.ts_nsec;
-        tsps->tv_sec  = secs;
-        tsps->tv_psec = nsecs * 1000;
-    }
-
-    *pbufo = pbuf;
-    *pkt_hdro = pkt_hdr;
-
-    return 0;
-
-}
-
-
 typedef struct
 {
     double max_pps;
@@ -188,41 +109,10 @@ typedef struct
 int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_stop, window_stats_t* total_stats)
 {
     ch_log_info("PCAP analyser, opening file...\n");
-    int fd = open(options.input,O_RDONLY);
-    if(fd < 0){
-        ch_log_fatal("Could not open PCAP %s (%s)\n", options.input, strerror(errno));
+    pcap_buff_t buff = {0};
+    if(pcap_buff_from_file(&buff, options.input) != BUFF_ENONE){
+        ch_log_fatal("Failed to createa new pcap buff from file: %s\n", options.input);
     }
-
-    struct stat st = {0};
-    if(stat(options.input, &st))
-    {
-        ch_log_fatal("Could not stat file %s: \"%s\"\n", options.input, strerror(errno));
-    }
-    const ssize_t filesize = st.st_size;
-
-
-    char* mem = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE , fd, 0);
-    if(mem == MAP_FAILED)
-    {
-        ch_log_fatal("Could not map input file %s: \"%s\"\n", options.input, strerror(errno));
-    }
-
-    int64_t offset = 0;
-
-    pcap_file_header_t* fhdr = (pcap_file_header_t*)(mem + offset);
-    offset += sizeof(pcap_file_header_t);
-    char* magic_str = fhdr->magic == NSEC_TCPDUMP_MAGIC ? "Nansec TCP Dump" :  "UNKNOWN";
-    magic_str = fhdr->magic == TCPDUMP_MAGIC ? "TCP Dump" :  magic_str;
-    if(options.verbose){
-        printf("Magic    0x%08x (%i) (%s)\n", fhdr->magic, fhdr->magic, magic_str);
-        printf("Ver Maj  0x%04x     (%i)\n", fhdr->version_major, fhdr->version_major);
-        printf("Ver Min  0x%04x     (%i)\n", fhdr->version_minor, fhdr->version_minor);
-        printf("Thiszone 0x%08x (%i)\n", fhdr->thiszone, fhdr->thiszone);
-        printf("SigFigs  0x%08x (%i)\n", fhdr->sigfigs, fhdr->sigfigs);
-        printf("Snap Len 0x%08x (%i)\n", fhdr->snaplen, fhdr->snaplen);
-        printf("Link typ 0x%08x (%i)\n", fhdr->linktype, fhdr->linktype);
-    }
-
 
     timespecps_t pkt_now    = {0};
     double windowstartns    = 0.0;
@@ -241,27 +131,16 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
     /* Packet data */
     pcap_pkthdr_t* pkt_hdr;
     expcap_pktftr_t* pkt_ftr;
-    char* pbuf = NULL;
-    int err = 0;
+    pkt_info_t pkt_info;
 
     double prev_pkt_ts_ns = 0.0;
     double prev_pkt_size = 0;
     int64_t trace_pkt_count = 0;
     int window_start_pkt_num = 0;
-    
-    for(int pkt_num = 0; (!stop) && (pkt_num < options.offset + options.max) && offset < filesize; pkt_num++){
+
+    for(int pkt_num = 0; (!stop) && (pkt_num < options.offset + options.max); pkt_num++){
         if(pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Loaded %li,000,000 packets\n", pkt_num/1000/1000);
-        }
-
-        err = read_packet(mem, &offset, fhdr->snaplen, &pkt_hdr, &pbuf, expcap, &pkt_ftr,&pkt_now);
-        if(err == EOF_NORMAL){
-            break;
-        }
-
-        if(err == EOF_UNEXPECT){
-            ch_log_error("Unexpected end of file\n");
-            break;
         }
 
         if(pkt_num < options.offset){
@@ -272,9 +151,40 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
         /*-------------------------------------------------------------------*/
         trace_pkt_count++;
 
+        pkt_info = pcap_buff_next_packet(&buff);
+        pkt_hdr = buff.hdr;
+        switch(pkt_info){
+        case PKT_EOF:
+            goto analysis_done;
+        case PKT_OVER_SNAPLEN:
+            ch_log_fatal("Packet with index %d does not comply with snaplen: %d (data len is %d)\n", pkt_num, buff.snaplen, buff.hdr->len);
+            break;
+        case PKT_SNAPPED:
+            if(options.verbose){
+                ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d).\n", pkt_hdr->caplen, pkt_hdr->len);
+            }
+            break;
+        case PKT_PADDING:
+            ch_log_fatal("File %s still contains expcap padding. Use exact-pcap-extract to remove padding packets from this capture\n", options.input);
+            break;
+        case PKT_OK: // Fall through
+        case PKT_RUNT:
+        case PKT_ERROR:
+            break;
+        }
+
+        pkt_ftr = buff.ftr;
+        if(expcap){
+            pkt_now.tv_sec = pkt_ftr->ts_secs;
+            pkt_now.tv_psec = pkt_ftr->ts_psecs;
+        } else{
+            pkt_now.tv_sec = pkt_hdr->ts.ns.ts_sec;
+            pkt_now.tv_psec = pkt_hdr->ts.ns.ts_nsec * 1000;
+        }
+
         const int64_t pkt_size = pkt_hdr->len;
         const timespecps_t rel_time  = sub_tsps_tsps(&pkt_now,trace_start);
- 
+
         if(trace_pkt_count == 1){
             *trace_start = pkt_now;
             windowstartns = 0;
@@ -284,9 +194,9 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
         }
 
         nowoffsetns = tsps_to_double_ns(&rel_time);
-       
+
         const double window_ns = nowoffsetns - windowstartns;
-        
+
         /* Must wait until at least 2 packets have been seen in order to determine an IFG. */
         if( window_ns > options.window_ms * 1000 * 1000 && pkt_num > window_start_pkt_num + 1){
             //Output stats here
@@ -302,7 +212,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
                         (long long)nsecs,
                         pkt_num,
                         window_ns /1000/1000.0,
-                        
+
                         window_stats.min_ifg,
                         avg_ifg,
                         window_stats.max_ifg,
@@ -317,7 +227,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
 
                         mpps,
                         gbps);
-        
+
             //Reset all the stats counters here.
             window_stats = zero_ws;
             const int64_t pkt_ifg_ps = 20 * 8 * 1000/options.line_rate_gbps;
@@ -339,7 +249,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
 
         const double prev_pkt_end_ns = prev_pkt_ts_ns + prev_pkt_ps/1000;
         const double curr_pkt_end_ns = nowoffsetns + curr_pkt_ps/1000;
-        
+
         const double packet_time = curr_pkt_end_ns - prev_pkt_end_ns;
         const double inst_mpps    = 1000.0/packet_time;
 
@@ -370,9 +280,8 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
         prev_pkt_size  = pkt_size;
 
     }
+analysis_done:
     *trace_stop = pkt_now;
-
-    close(fd);
 
     return trace_pkt_count;
 }
@@ -456,5 +365,4 @@ int main(int argc, char** argv)
     ch_log_info("PCAP analyzer, finished\n");
     result = 0;
     return result;
-
 }
