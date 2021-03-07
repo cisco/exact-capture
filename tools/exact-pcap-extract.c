@@ -519,11 +519,11 @@ begin_loop:
                 break;
             case PKT_OVER_SNAPLEN:
                  ch_log_fatal("Packet with index %d (%s) does not comply with snaplen: %d (data len is %d)\n",
-                              pkt_idx, cur_filename, &rd_buffs[buff_idx].snaplen, &rd_buffs[buff_idx].hdr->len);
+                              pkt_idx, cur_filename, rd_buffs[buff_idx].snaplen, rd_buffs[buff_idx].hdr->len);
             case PKT_SNAPPED:
                 if(options.verbose){
                     ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d) [%s].\n",
-                                &rd_buffs[buff_idx].hdr->caplen, &rd_buffs[buff_idx].hdr->len, cur_filename);
+                                rd_buffs[buff_idx].hdr->caplen, rd_buffs[buff_idx].hdr->len, cur_filename);
                 }
             case PKT_OK:
                 break;
