@@ -71,6 +71,7 @@ static struct
     ch_bool allow_duplicates;
     ch_bool hpt_trailer;
     char* steer_type;
+    ch_bool verbose;
 } options;
 
 enum out_format_type {
@@ -351,6 +352,7 @@ int main (int argc, char** argv)
     ch_opt_addbi (CH_OPTION_FLAG,     'D', "allow-duplicates", "Allow duplicate filenames to be used", &options.allow_duplicates, false);
     ch_opt_addbi (CH_OPTION_FLAG,     't', "hpt-trailer", "Extract timestamps from Fusion HPT trailers", &options.hpt_trailer, false);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 's', "steer",    "Steer packets to different files depending on packet contents. Valid values are [hpt, vlan, expcap]", &options.steer_type, NULL);
+    ch_opt_addbi (CH_OPTION_FLAG,     'v', "verbose",  "Printout verbose output.", &options.verbose, false);
 
     ch_opt_parse (argc, argv);
 
@@ -488,6 +490,9 @@ begin_loop:
             }
 
             pkt_info = pcap_buff_next_packet(&rd_buffs[buff_idx]);
+            const char* cur_filename = pcap_buff_get_filename(&rd_buffs[buff_idx]);
+            const uint64_t pkt_idx = rd_buffs[buff_idx].idx;
+
             switch(pkt_info){
             case PKT_PADDING:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n", pkt_idx, buff_idx);
@@ -504,14 +509,22 @@ begin_loop:
                 break;
             case PKT_ERROR:
                 ch_log_debug1("Skipping over damaged packet %i (buffer %i) because flags = 0x%02x\n",
-                              pkt_idx, buff_idx, pkt_ftr->flags);
+                              pkt_idx, buff_idx, rd_buffs[buff_idx].ftr->flags);
                 dropped_errors++;
                 buff_idx--;
                 continue;
             case PKT_EOF:
-                ch_log_debug1("End of file \"%s\"\n", pcap_buff_get_filename(&rd_buffs[buff_idx]));
+                ch_log_debug1("End of file \"%s\"\n", cur_filename);
                 goto begin_loop;
                 break;
+            case PKT_OVER_SNAPLEN:
+                 ch_log_fatal("Packet with index %d (%s) does not comply with snaplen: %d (data len is %d)\n",
+                              pkt_idx, cur_filename, &rd_buffs[buff_idx].snaplen, &rd_buffs[buff_idx].hdr->len);
+            case PKT_SNAPPED:
+                if(options.verbose){
+                    ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d) [%s].\n",
+                                &rd_buffs[buff_idx].hdr->caplen, &rd_buffs[buff_idx].hdr->len, cur_filename);
+                }
             case PKT_OK:
                 break;
             }
