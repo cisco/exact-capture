@@ -1,3 +1,14 @@
+## Version 1.2.1
+**Release date:** 8 March 2021 </br>
+**Commit ID:** [5025a3682a26179808574e1261be94da93341db3](https://github.com/exablaze-oss/exact-capture/commit/5025a3682a26179808574e1261be94da93341db3) </br>
+**Source:** [https://github.com/exablaze-oss/exact-capture/releases/tag/v1.2.1](https://github.com/exablaze-oss/exact-capture/releases/tag/v1.2.1)
+
+**Release Notes:**
+
+* Fix non-fatal compiler warning: enumeration value ‘PKT_OVER_SNAPLEN’ not handled in switch
+
+ ---------------------------------------                                         
+
 ## Version 1.2
 **Release date:** 5 March 2021 </br>
 **Commit ID:** [fdf4d555e768d839eb8d98d66aac70ec4f34d4ad](https://github.com/exablaze-oss/exact-capture/commit/fdf4d555e768d839eb8d98d66aac70ec4f34d4ad) </br>
