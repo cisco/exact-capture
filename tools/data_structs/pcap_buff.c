@@ -46,18 +46,11 @@ buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename)
     return BUFF_ENONE;
 }
 
-pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff)
+pkt_info_t pcap_buff_get_info(pcap_buff_t *pcap_buff)
 {
-    pcap_pkthdr_t* curr_hdr = pcap_buff->hdr;
-
-    if(curr_hdr == NULL){
+    if(pcap_buff->hdr == NULL){
         pcap_buff->hdr = (pcap_pkthdr_t*)(pcap_buff->_buff->data + sizeof(pcap_file_header_t));
         pcap_buff->idx = 0;
-    } else {
-        const int64_t curr_cap_len = curr_hdr->caplen;
-        pcap_pkthdr_t* next_hdr = (pcap_pkthdr_t*)((char*)(curr_hdr+1) + curr_cap_len);
-        pcap_buff->hdr = next_hdr;
-        pcap_buff->idx++;
     }
 
     pcap_buff->pkt = (char*)(pcap_buff->hdr + 1);
@@ -101,6 +94,23 @@ pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff)
     }
 
     return PKT_OK;
+}
+
+pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff)
+{
+    pcap_pkthdr_t* curr_hdr = pcap_buff->hdr;
+
+    if(curr_hdr == NULL){
+        pcap_buff->hdr = (pcap_pkthdr_t*)(pcap_buff->_buff->data + sizeof(pcap_file_header_t));
+        pcap_buff->idx = 0;
+    } else {
+        const int64_t curr_cap_len = curr_hdr->caplen;
+        pcap_pkthdr_t* next_hdr = (pcap_pkthdr_t*)((char*)(curr_hdr+1) + curr_cap_len);
+        pcap_buff->hdr = next_hdr;
+        pcap_buff->idx++;
+    }
+
+    return pcap_buff_get_info(pcap_buff);
 }
 
 bool pcap_buff_eof(pcap_buff_t* pcap_buff)

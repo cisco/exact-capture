@@ -30,9 +30,12 @@ buff_error_t pcap_buff_init(char* filename, int64_t snaplen, int64_t max_filesiz
 
 /* Read in a pcap from disk. */
 /* The underlying buff is read only */
-buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename);
+buff_error_t pcap_buff_from_file(pcap_buff_t *pcap_buff, char *filename);
 
-/* Adjust hdr, data, idx, ftr to point to the next packet */
+/* Return information about the current packet */
+pkt_info_t pcap_buff_get_info(pcap_buff_t *pcap_buff);
+
+/* Adjust hdr, data, idx, ftr to point to the next packet and return packet information */
 pkt_info_t pcap_buff_next_packet(pcap_buff_t* pcap_buff);
 
 /* Get the filename used by the buff_t. */

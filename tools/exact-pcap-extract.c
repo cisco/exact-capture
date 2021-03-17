@@ -489,7 +489,7 @@ begin_loop:
                 continue;
             }
 
-            pkt_info = pcap_buff_next_packet(&rd_buffs[buff_idx]);
+            pkt_info = pcap_buff_get_info(&rd_buffs[buff_idx]);
             const char* cur_filename = pcap_buff_get_filename(&rd_buffs[buff_idx]);
             const uint64_t pkt_idx = rd_buffs[buff_idx].idx;
 
@@ -498,12 +498,14 @@ begin_loop:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n", pkt_idx, buff_idx);
                 dropped_padding++;
                 buff_idx--;
+                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 continue;
             case PKT_RUNT:
                 if(options.skip_runts){
                     ch_log_debug1("Skipping over runt frame %i (buffer %i) \n", pkt_idx, buff_idx);
                     dropped_runts++;
                     buff_idx--;
+                    pcap_buff_next_packet(&rd_buffs[buff_idx]);
                     continue;
                 }
                 break;
@@ -512,6 +514,7 @@ begin_loop:
                               pkt_idx, buff_idx, rd_buffs[buff_idx].ftr->flags);
                 dropped_errors++;
                 buff_idx--;
+                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 continue;
             case PKT_EOF:
                 ch_log_debug1("End of file \"%s\"\n", cur_filename);
@@ -520,7 +523,7 @@ begin_loop:
             case PKT_OVER_SNAPLEN:
                  ch_log_fatal("Packet with index %d (%s) does not comply with snaplen: %d (data len is %d)\n",
                               pkt_idx, cur_filename, rd_buffs[buff_idx].snaplen, rd_buffs[buff_idx].hdr->len);
-            case PKT_SNAPPED:
+            case PKT_SNAPPED: // Fall through
                 if(options.verbose){
                     ch_log_warn("Packet has been snapped shorter (%d) than it's wire length (%d) [%s].\n",
                                 rd_buffs[buff_idx].hdr->caplen, rd_buffs[buff_idx].hdr->len, cur_filename);
@@ -602,6 +605,7 @@ begin_loop:
 
         packets_total++;
         count++;
+        pcap_buff_next_packet(&rd_buffs[min_idx]);
         if(options.max_count && count >= options.max_count){
             break;
         }
