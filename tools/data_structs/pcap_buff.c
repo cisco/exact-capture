@@ -46,7 +46,7 @@ buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename)
     return BUFF_ENONE;
 }
 
-pkt_info_t pcap_buff_get_info(pcap_buff_t *pcap_buff)
+pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff)
 {
     if(pcap_buff->hdr == NULL){
         pcap_buff->hdr = (pcap_pkthdr_t*)(pcap_buff->_buff->data + sizeof(pcap_file_header_t));
