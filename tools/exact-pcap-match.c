@@ -335,27 +335,27 @@ ref_pcap_loaded:
         /* Look for this packet in the hash map */
         const int64_t caplen = expcap ? inp_hdr->caplen - sizeof(expcap_pktftr_t) : inp_hdr->caplen;
         ch_hash_map_it hmit = hash_map_get_first (hmap, inp_buff.pkt, caplen);
-	if(hmit.key)
-	{
-	    ch_word num_matches = 0;
-	    value_t* val = (value_t*) hmit.value;
-	    while(val->matched_once && num_matches < options.max_dupes)
-	    {
-		hmit = hash_map_get_next(hmit);
-		val = (value_t*) hmit.value;
-		num_matches++;
-	    }
-	}
+        if(hmit.key)
+        {
+            ch_word num_matches = 0;
+            value_t* val = (value_t*) hmit.value;
+            while(val->matched_once && num_matches < options.max_dupes)
+            {
+                hmit = hash_map_get_next(hmit);
+                val = (value_t*) hmit.value;
+                num_matches++;
+            }
+        }
 
-	value_t* val = (value_t*) hmit.value;
-	if (!hmit.key || val->matched_once)
-	{
-	    total_lost++;
-	    if (fd_inp_miss > 0){
-		dprint_packet (fd_inp_miss, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, true, true);
-	    }
-	    continue;
-	}
+        value_t* val = (value_t*) hmit.value;
+        if (!hmit.key || val->matched_once)
+        {
+            total_lost++;
+            if (fd_inp_miss > 0){
+                dprint_packet (fd_inp_miss, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, true, true);
+            }
+            continue;
+        }
 
         total_matched++;
         char* ref_pkt = (char*) hmit.key;
