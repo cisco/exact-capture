@@ -463,32 +463,14 @@ int main (int argc, char** argv)
     i64 count = 0;
     for(int i = 0; !lstop ; i++)
     {
-begin_loop:
         ch_log_debug1("\n%i ######\n", i );
 
-        /* Check all the FD in case we've read everything  */
-        ch_log_debug1("Checking for EOF\n");
-        bool all_eof = true;
-        for(int i = 0; i < rd_buffs_count; i++){
-            all_eof &= pcap_buff_eof(&rd_buffs[i]);
-        }
-        if(all_eof){
-            ch_log_info("All files empty, exiting now\n");
-            break;
-        }
-
+        int32_t eof_buffs = 0;
         ch_log_debug1("Looking for minimum timestamp index on %i buffers\n",
                       rd_buffs_count);
         /* Find the read buffer with the earliest timestamp */
         int64_t min_idx          = 0;
         for(int buff_idx = 0; buff_idx < rd_buffs_count; buff_idx++ ){
-            if(pcap_buff_eof(&rd_buffs[buff_idx])){
-                if(min_idx == buff_idx){
-                    min_idx = buff_idx+1;
-                }
-                continue;
-            }
-
             pkt_info = pcap_buff_get_info(&rd_buffs[buff_idx]);
             const char* cur_filename = pcap_buff_get_filename(&rd_buffs[buff_idx]);
             const uint64_t pkt_idx = rd_buffs[buff_idx].idx;
@@ -496,30 +478,35 @@ begin_loop:
             switch(pkt_info){
             case PKT_PADDING:
                 ch_log_debug1("Skipping over packet %i (buffer %i) because len=0\n", pkt_idx, buff_idx);
+                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 dropped_padding++;
                 buff_idx--;
-                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 continue;
             case PKT_RUNT:
                 if(options.skip_runts){
                     ch_log_debug1("Skipping over runt frame %i (buffer %i) \n", pkt_idx, buff_idx);
+                    pcap_buff_next_packet(&rd_buffs[buff_idx]);
                     dropped_runts++;
                     buff_idx--;
-                    pcap_buff_next_packet(&rd_buffs[buff_idx]);
                     continue;
                 }
                 break;
             case PKT_ERROR:
                 ch_log_debug1("Skipping over damaged packet %i (buffer %i) because flags = 0x%02x\n",
                               pkt_idx, buff_idx, rd_buffs[buff_idx].ftr->flags);
+                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 dropped_errors++;
                 buff_idx--;
-                pcap_buff_next_packet(&rd_buffs[buff_idx]);
                 continue;
             case PKT_EOF:
                 ch_log_debug1("End of file \"%s\"\n", cur_filename);
-                goto begin_loop;
-                break;
+                eof_buffs++;
+
+                /* All buffers are EOF, exit main loop. */
+                if(eof_buffs == rd_buffs_count){
+                    goto extract_done;
+                }
+                continue;
             case PKT_OVER_SNAPLEN:
                  ch_log_fatal("Packet with index %d (%s) does not comply with snaplen: %d (data len is %d)\n",
                               pkt_idx, cur_filename, rd_buffs[buff_idx].snaplen, rd_buffs[buff_idx].hdr->len);
@@ -610,6 +597,7 @@ begin_loop:
             break;
         }
     }
+extract_done:
 
     ch_log_info("Finished writing %li packets total (Runts=%li, Errors=%li, Padding=%li). Closing\n", packets_total, dropped_runts, dropped_errors, dropped_padding);
 
