@@ -144,8 +144,6 @@ int snprint_packet (char* out, int max, bool expcap, pcap_pkthdr_t* pkt_hdr,
 
 int main (int argc, char** argv)
 {
-    ch_word result = -1;
-
     signal (SIGHUP, signal_handler);
     signal (SIGINT, signal_handler);
     signal (SIGPIPE, signal_handler);
@@ -450,6 +448,5 @@ find_input_misses:
     }
 
     ch_log_info("PCAP matcher, finished\n");
-    return result;
-
+    return 0;
 }
