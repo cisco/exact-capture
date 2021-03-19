@@ -240,7 +240,7 @@ buff_error_t buff_close(buff_t* buff){
     }
 
     if(buff->read_only){
-        if(munmap(buff->data, BUFF_SIZE) != 0){
+        if(munmap(buff->data, buff->filesize) != 0){
             ch_log_warn("Failed to unmap memory allocated for buff_t (%s) : %s\n", buff->filename, strerror(errno));
             return BUFF_ECLOSE;
         }
