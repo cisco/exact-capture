@@ -88,7 +88,7 @@ uint16_t csum(uint8_t* buf, size_t len, uint16_t initial)
 }
 
 /* Format a pseudo IP header, used for UDP/TCP checksum calculation */
-inline void get_pseudo_iphdr(struct iphdr* ip_hdr, uint16_t hdr_len, struct pseudo_iphdr* hdro)
+static inline void get_pseudo_iphdr(struct iphdr* ip_hdr, uint16_t hdr_len, struct pseudo_iphdr* hdro)
 {
     hdro->saddr = ip_hdr->saddr;
     hdro->daddr = ip_hdr->daddr;

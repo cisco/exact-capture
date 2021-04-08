@@ -136,6 +136,21 @@ int64_t min_packet_ts(int64_t buff_idx_lhs, int64_t buff_idx_rhs, pcap_buff_t* b
 {
     ch_log_debug1("checking minimum packet ts on %li vs %li at %p\n", buff_idx_lhs, buff_idx_rhs, buffs);
 
+    bool lhs_eof = pcap_buff_eof(&buffs[buff_idx_lhs]);
+    bool rhs_eof = pcap_buff_eof(&buffs[buff_idx_rhs]);
+
+    if(lhs_eof && rhs_eof){
+	ch_log_fatal("Cannot compare timestamps against two buffs which are at EOF.\n");
+    }
+
+    if(lhs_eof){
+	return buff_idx_rhs;
+    }
+
+    if(rhs_eof){
+	return buff_idx_lhs;
+    }
+
 #ifndef NDEBUG
     pcap_pkthdr_t* lhs_hdr = buffs[buff_idx_lhs].hdr;
     pcap_pkthdr_t* rhs_hdr = buffs[buff_idx_rhs].hdr;
