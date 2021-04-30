@@ -860,8 +860,7 @@ int main(int argc, char** argv)
                 break;
             }
         default:{
-            const uint16_t ip_tot_len = be16toh(rd_ip_hdr->tot_len);
-            const uint64_t bytes_remaining = ip_tot_len - rd_ip_hdr_len;
+            const uint64_t bytes_remaining = pkt_hdr->len - (pbuf - pkt_start) - ETH_CRC_LEN;
             memcpy(match_wr_buff.data + match_wr_buff.offset, pbuf, bytes_remaining);
             pbuf += bytes_remaining;
             match_wr_buff.offset += bytes_remaining;

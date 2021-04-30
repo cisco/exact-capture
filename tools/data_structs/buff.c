@@ -245,6 +245,7 @@ buff_error_t buff_close(buff_t* buff){
             return BUFF_ECLOSE;
         }
     } else{
+        buff_flush_to_disk(buff);
         free(buff->data);
     }
 
