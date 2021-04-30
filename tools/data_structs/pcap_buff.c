@@ -157,7 +157,6 @@ buff_error_t pcap_buff_write(pcap_buff_t* pcap_buff, pcap_pkthdr_t* hdr, char* d
     }
 
     ch_log_debug1("header bytes=%li\n", sizeof(pcap_pkthdr_t));
-    ch_log_debug1("packet_bytes=%li\n", packet_copy_bytes);
     ch_log_debug1("footer bytes=%li\n", sizeof(expcap_pktftr_t));
     ch_log_debug1("max pcap_record_bytes=%li\n", pcap_record_bytes);
 

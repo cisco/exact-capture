@@ -41,6 +41,8 @@ struct
     char* csv;
     char* inp_missed;
     char* ref_missed;
+    char* inp_miss_pcap;
+    char* ref_miss_pcap;
     char* format;
     ch_word num;
     ch_word offset_ref;
@@ -155,6 +157,8 @@ int main (int argc, char** argv)
     ch_opt_addsu (CH_OPTION_REQUIRED, 'c', "csv", "Output CSV", &options.csv);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 'R', "ref-miss", "Reference misses", &options.ref_missed, NULL);
     ch_opt_addsi (CH_OPTION_OPTIONAL, 'I', "inp-miss", "Input misses", &options.inp_missed, NULL);
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'e', "ref-miss-pcap", "Reference misses capture", &options.ref_miss_pcap, NULL);
+    ch_opt_addsi (CH_OPTION_OPTIONAL, 'p', "inp-miss-pcap", "Input misses capture", &options.inp_miss_pcap, NULL);
     ch_opt_addsu (CH_OPTION_REQUIRED, 'f', "format", "Input format [pcap | expcap]", &options.format);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'O', "offset-ref", "Offset into the reference file to start ", &options.offset_ref, 0);
     ch_opt_addii (CH_OPTION_OPTIONAL, 'o', "offset-inp", "Offset into the input file to start ", &options.offset_inp, 0);
@@ -167,7 +171,7 @@ int main (int argc, char** argv)
     ch_log_info("Starting PCAP Matcher\n");
 
     ch_log_settings.log_level = CH_LOG_LVL_DEBUG1;
-    
+
     int fd_out = open (options.csv, O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (fd_out < 0){
         ch_log_fatal("Could not open output csv %s (%s)\n", options.csv,
@@ -223,6 +227,22 @@ int main (int argc, char** argv)
         ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.ref);
     }
 
+    pcap_buff_t* ref_miss_buff;
+    if(options.ref_miss_pcap){
+	ref_miss_buff = malloc(sizeof(pcap_buff_t));
+	if(!ref_miss_buff){
+            ch_log_fatal("Could not allocate memory for reference miss buff_t.\n");
+	}
+
+        /* Create a new pcap buff for reference misses.
+           It's created without options, since we want a copy of packets as they
+           exist in the ref pcap. */
+        buff_error_t err = pcap_buff_init(options.ref_miss_pcap, 0, 0, 0, 0, 0, ref_miss_buff);
+        if(err != BUFF_ENONE){
+            ch_log_fatal("Failed to create a new write buffer for ref miss pcap: %s\n", buff_strerror(err));
+	}
+    }
+
     int64_t pkt_num = 0;
     int64_t loaded = 0;
     for (pkt_num = 0; !stop && pkt_num < options.max_ref + options.offset_ref; pkt_num++){
@@ -271,7 +291,7 @@ int main (int argc, char** argv)
         }
 
         const int64_t caplen = expcap ? ref_hdr->caplen - sizeof(expcap_pktftr_t) : ref_hdr->caplen;
-        
+
         /*Use the whole packet as the key, and the header as the value */
         hash_map_push (hmap, ref_buff.pkt, caplen, &val);
 
@@ -287,6 +307,22 @@ ref_pcap_loaded:
     pcap_buff_t inp_buff = {0};
     if(pcap_buff_from_file(&inp_buff, options.input) != BUFF_ENONE){
         ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.input);
+    }
+
+    pcap_buff_t* inp_miss_buff;
+    if(options.inp_miss_pcap){
+        inp_miss_buff = malloc(sizeof(pcap_buff_t));
+        if(!inp_miss_buff){
+            ch_log_fatal("Could not allocate memory for input miss buff_t.\n");
+        }
+
+        /* Create a new pcap buff for reference misses.
+           It's created without options, since we want a copy of packets as they
+           exist in the ref pcap. */
+        buff_error_t err = pcap_buff_init(options.inp_miss_pcap, 0, 0, 0, 0, 0, inp_miss_buff);
+        if(err != BUFF_ENONE){
+            ch_log_fatal("Failed to create a new write buffer for ref miss pcap: %s\n", buff_strerror(err));
+        }
     }
 
     int64_t total_matched = 0;
@@ -351,6 +387,9 @@ ref_pcap_loaded:
             total_lost++;
             if (fd_inp_miss > 0){
                 dprint_packet (fd_inp_miss, expcap, inp_hdr, inp_buff.ftr, inp_buff.pkt, true, true);
+            }
+        if (options.inp_miss_pcap){
+                pcap_buff_write(inp_miss_buff, inp_hdr, inp_buff.pkt, inp_hdr->caplen, NULL);
             }
             continue;
         }
@@ -427,6 +466,10 @@ find_input_misses:
             if (fd_ref_miss > 0){
                 dprint_packet (fd_ref_miss, expcap, &val->pkt_hdr, &val->pkt_ftr, hmit.key, true, true);
             }
+
+            if(options.ref_miss_pcap){
+                pcap_buff_write(ref_miss_buff, &val->pkt_hdr, hmit.key, val->pkt_hdr.caplen, NULL);
+	    }
         }
 
         hash_map_next (hmap, &hmit);
@@ -440,11 +483,17 @@ find_input_misses:
     pcap_buff_close(&ref_buff);
     pcap_buff_close(&inp_buff);
 
-    if (fd_inp_miss > 0){
+    if(fd_inp_miss > 0){
         close (fd_inp_miss);
     }
-    if (fd_ref_miss > 0){
+    if(fd_ref_miss > 0){
         close (fd_ref_miss);
+    }
+    if(options.inp_miss_pcap){
+        pcap_buff_close(inp_miss_buff);
+    }
+    if(options.ref_miss_pcap){
+        pcap_buff_close(ref_miss_buff);
     }
 
     ch_log_info("PCAP matcher, finished\n");
