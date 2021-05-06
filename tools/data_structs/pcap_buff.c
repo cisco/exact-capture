@@ -82,21 +82,21 @@ pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff)
     }
 
     if(pcap_buff->expcap){
-	pcap_buff->ftr = (expcap_pktftr_t*)(pcap_buff->pkt + pcap_buff->hdr->caplen - sizeof(expcap_pktftr_t));
+        pcap_buff->ftr = (expcap_pktftr_t*)(pcap_buff->pkt + pcap_buff->hdr->caplen - sizeof(expcap_pktftr_t));
 
-	if(pcap_buff->ftr->foot.extra.dropped > 0){
-	    ch_log_warn("%li packets were droped before this one\n",
-			pcap_buff->ftr->foot.extra.dropped);
-	}
+        if(pcap_buff->ftr->foot.extra.dropped > 0){
+            ch_log_warn("%li packets were droped before this one\n",
+                pcap_buff->ftr->foot.extra.dropped);
+        }
 
-	if( (pcap_buff->ftr->flags & EXPCAP_FLAG_ABRT) ||
-	    (pcap_buff->ftr->flags & EXPCAP_FLAG_CRPT) ||
-	    (pcap_buff->ftr->flags & EXPCAP_FLAG_SWOVFL)){
+        if( (pcap_buff->ftr->flags & EXPCAP_FLAG_ABRT) ||
+            (pcap_buff->ftr->flags & EXPCAP_FLAG_CRPT) ||
+            (pcap_buff->ftr->flags & EXPCAP_FLAG_SWOVFL)){
 
-	    return PKT_ERROR;
-	}
+            return PKT_ERROR;
+        }
     } else {
-	pcap_buff->ftr = NULL;
+        pcap_buff->ftr = NULL;
     }
 
     return PKT_OK;
