@@ -133,7 +133,7 @@ int main(int argc, char** argv)
 
     ch_log_info("Starting PCAP parser...\n");
     pcap_buff_t buff = {0};
-    if(pcap_buff_from_file(&buff, options.input) != BUFF_ENONE){
+    if(pcap_buff_from_file(&buff, options.input, expcap) != BUFF_ENONE){
         ch_log_fatal("Failed to create a new pcap buff from file: %s\n", options.input);
     }
 

@@ -453,7 +453,7 @@ int main (int argc, char** argv)
         ch_log_fatal("Could not allocate memory for read buffers table\n");
     }
     for(int i = 0; i < rd_buffs_count; i++){
-        buff_err = pcap_buff_from_file(&rd_buffs[i], options.reads->first[i]);
+        buff_err = pcap_buff_from_file(&rd_buffs[i], options.reads->first[i], true);
         if(buff_err != BUFF_ENONE){
             ch_log_fatal("Failed to read %s into a pcap_buff_t: %s\n", options.reads->first[i], buff_strerror(buff_err));
         }

@@ -110,7 +110,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
 {
     ch_log_info("PCAP analyser, opening file...\n");
     pcap_buff_t buff = {0};
-    if(pcap_buff_from_file(&buff, options.input) != BUFF_ENONE){
+    if(pcap_buff_from_file(&buff, options.input, expcap) != BUFF_ENONE){
         ch_log_fatal("Failed to createa new pcap buff from file: %s\n", options.input);
     }
 
