@@ -14,9 +14,6 @@
 #include <time.h>
 #include <string.h>
 
-#include <exanic/port.h>
-#include <exanic/config.h>
-
 #include "utils.h"
 
 int64_t time_now_ns()
