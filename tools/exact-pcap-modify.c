@@ -610,6 +610,7 @@ int main(int argc, char** argv)
     int64_t timenowns = 0;
     int64_t timeprevns = 0;
     int64_t matched_out = 0;
+    int64_t modified_out = 0;
     int64_t filtered_out = 0;
     const int64_t vlan_bytes = !old_vlan_hdr.h_vlan_TCI && new_vlan_hdr.h_vlan_TCI ? VLAN_HLEN : 0;
     for(int pkt_num = 0; (!stop) && (pkt_num < options.offset + options.max) && offset < filesize; pkt_num++,
@@ -894,6 +895,7 @@ int main(int argc, char** argv)
         if(recalc_eth_crc || recalc_ip_csum || recalc_prot_csum){
             *wr_eth_crc = 0;
             *wr_eth_crc = crc32(((char *)wr_hdr + sizeof(pcap_pkthdr_t)), (wr_hdr->len - ETH_CRC_LEN));
+            modified_out++;
         }
         match_wr_buff.offset += ETH_CRC_LEN;
         pbuf += ETH_CRC_LEN;
@@ -933,8 +935,16 @@ int main(int argc, char** argv)
         close(filter_wr_buff.fd);
     }
 
-    ch_log_info("Modified %li packets\n", matched_out);
-    ch_log_info("Filtered %li packets\n", filtered_out);
+    if(modified_out > 0){
+        ch_log_info("Modified %li packets\n", modified_out);
+    }
+    else{
+        ch_log_info("Filter matched %li packets\n", matched_out);
+    }
+    if(options.write_filtered){
+        ch_log_info("Filtered out %li packets\n", filtered_out);
+    }
+
     ch_log_info("PCAP modifier, finished\n");
     return 0;
 }
