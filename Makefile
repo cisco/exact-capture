@@ -36,7 +36,6 @@ bin/exact-pcap-parse: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(EXACTC
 	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-parse.c $(LDFLAGS) -o $@
 
 bin/exact-pcap-match: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-match.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
-	mkdir -p bin
 	$(CC) $(CFLAGS) $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-match.c $(LDFLAGS) -o $@
 
 bin/exact-pcap-extract: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-extract.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
@@ -48,12 +47,19 @@ bin/exact-pcap-analyze: $(BUFF_SRC) $(BUFF_HDRS) tools/exact-pcap-analyze.c tool
 bin/exact-pcap-modify: tools/exact-pcap-modify.c $(EXACTCAP_HDRS) $(LIBCAHSTE_HDRS)
 	$(CC) $(CFLAGS) tools/exact-pcap-modify.c $(LDFLAGS) -o $@
 
-install: all
+install: all install_tools
 	install -d $(PREFIX)/bin
 	install -m 0755 -D $(BIN) $(PREFIX)/bin
 
-uninstall:
+install_tools: tools
+	install -d $(PREFIX)/bin
+	install -m 0755 -D $(TOOLS) $(PREFIX)/bin
+
+uninstall: uninstall_tools
 	rm -f $(foreach file,$(BIN),$(PREFIX)/bin/$(file))
+
+uninstall_tools:
+	rm -f $(foreach file,$(TOOLS),$(PREFIX)/bin/$(file))
 
 .PHONY: docs
 docs:
