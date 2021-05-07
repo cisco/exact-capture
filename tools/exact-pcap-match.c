@@ -223,7 +223,7 @@ int main (int argc, char** argv)
     /* Load up the reference file into the hashmap*/
     pcap_buff_t ref_buff = {0};
     ch_log_info("Loading reference file %s...\n", options.ref);
-    if(pcap_buff_from_file(&ref_buff, options.ref) != BUFF_ENONE){
+    if(pcap_buff_from_file(&ref_buff, options.ref, expcap) != BUFF_ENONE){
         ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.ref);
     }
 
@@ -305,7 +305,7 @@ ref_pcap_loaded:
 
     ch_log_info("Loading input file %s...\n", options.input);
     pcap_buff_t inp_buff = {0};
-    if(pcap_buff_from_file(&inp_buff, options.input) != BUFF_ENONE){
+    if(pcap_buff_from_file(&inp_buff, options.input, expcap) != BUFF_ENONE){
         ch_log_fatal("Failed to create new pcap buff from file: %s\n", options.input);
     }
 

@@ -40,8 +40,9 @@ buff_error_t pcap_buff_init(char* filename, int64_t snaplen, int64_t max_filesiz
     return BUFF_ENONE;
 }
 
-buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename)
+buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename, bool is_expcap)
 {
+    pcap_buff->expcap = is_expcap;
     BUFF_TRY(buff_init_from_file(&pcap_buff->_buff, filename, sizeof(pcap_file_header_t)));
     return BUFF_ENONE;
 }
@@ -54,7 +55,6 @@ pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff)
     }
 
     pcap_buff->pkt = (char*)(pcap_buff->hdr + 1);
-    pcap_buff->ftr = (expcap_pktftr_t*)(pcap_buff->pkt + pcap_buff->hdr->caplen - sizeof(expcap_pktftr_t));
 
     /* Check if we've overflowed */
     buff_t* buff = pcap_buff->_buff;
@@ -72,18 +72,6 @@ pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff)
         return PKT_RUNT;
     }
 
-    if(pcap_buff->ftr->foot.extra.dropped > 0){
-        ch_log_warn("%li packets were droped before this one\n",
-                    pcap_buff->ftr->foot.extra.dropped);
-    }
-
-    if( (pcap_buff->ftr->flags & EXPCAP_FLAG_ABRT) ||
-        (pcap_buff->ftr->flags & EXPCAP_FLAG_CRPT) ||
-        (pcap_buff->ftr->flags & EXPCAP_FLAG_SWOVFL)){
-
-        return PKT_ERROR;
-    }
-
     pcap_file_header_t* hdr = (pcap_file_header_t*)buff->file_header;
     if(pcap_buff->hdr->len > hdr->snaplen){
         return PKT_OVER_SNAPLEN;
@@ -91,6 +79,24 @@ pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff)
 
     if(pcap_buff->hdr->len > pcap_buff->hdr->caplen){
         return PKT_SNAPPED;
+    }
+
+    if(pcap_buff->expcap){
+        pcap_buff->ftr = (expcap_pktftr_t*)(pcap_buff->pkt + pcap_buff->hdr->caplen - sizeof(expcap_pktftr_t));
+
+        if(pcap_buff->ftr->foot.extra.dropped > 0){
+            ch_log_warn("%li packets were droped before this one\n",
+                pcap_buff->ftr->foot.extra.dropped);
+        }
+
+        if( (pcap_buff->ftr->flags & EXPCAP_FLAG_ABRT) ||
+            (pcap_buff->ftr->flags & EXPCAP_FLAG_CRPT) ||
+            (pcap_buff->ftr->flags & EXPCAP_FLAG_SWOVFL)){
+
+            return PKT_ERROR;
+        }
+    } else {
+        pcap_buff->ftr = NULL;
     }
 
     return PKT_OK;

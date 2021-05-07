@@ -11,6 +11,7 @@ typedef struct {
     int64_t snaplen;
     int64_t max_filesize;
     bool usec;
+    bool expcap;
     buff_t* _buff; // _private buff_t.
 } pcap_buff_t;
 
@@ -30,7 +31,7 @@ buff_error_t pcap_buff_init(char* filename, int64_t snaplen, int64_t max_filesiz
 
 /* Read in a pcap from disk. */
 /* The underlying buff is read only */
-buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename);
+buff_error_t pcap_buff_from_file(pcap_buff_t* pcap_buff, char* filename, bool is_expcap);
 
 /* Return information about the current packet */
 pkt_info_t pcap_buff_get_info(pcap_buff_t* pcap_buff);
