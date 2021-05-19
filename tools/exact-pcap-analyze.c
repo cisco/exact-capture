@@ -179,7 +179,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
             pkt_now.tv_psec = pkt_ftr->ts_psecs;
         } else{
             pkt_now.tv_sec = pkt_hdr->ts.ns.ts_sec;
-            pkt_now.tv_psec = pkt_hdr->ts.ns.ts_nsec * 1000;
+            pkt_now.tv_psec = (int64_t)pkt_hdr->ts.ns.ts_nsec * 1000;
         }
 
         const int64_t pkt_size = pkt_hdr->len;
@@ -207,7 +207,7 @@ int64_t load_trace(bool expcap, timespecps_t* trace_start, timespecps_t* trace_s
             const int64_t secs  = pkt_hdr->ts.ns.ts_sec;
             const int64_t nsecs = pkt_hdr->ts.ns.ts_nsec;
 
-            ch_log_info("[%lld.%lld]: offset=%i window=%.3lfms ipt=[%.3fns < %3.fns < %.3fns] size=[%iB < %0.3fB < %iB] rate=[%.3lfpps < %.3lfpps < %.3lfpps] %.3lfMpps %0.2lfGbps\n",
+            ch_log_info("[%lld.%09lld]: offset=%i window=%.3lfms ipt=[%.3fns < %3.fns < %.3fns] size=[%iB < %0.3fB < %iB] rate=[%.3lfpps < %.3lfpps < %.3lfpps] %.3lfMpps %0.2lfGbps\n",
                         (long long)secs,
                         (long long)nsecs,
                         pkt_num,
