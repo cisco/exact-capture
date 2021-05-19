@@ -70,6 +70,9 @@ struct {
     char* ip_ttl;
     char* src_port;
     char* dst_port;
+    bool force_crc_recalc;
+    bool force_ip_csum_recalc;
+    bool force_proto_csum_recalc;
     char* device_type;
 } options;
 
@@ -449,6 +452,10 @@ int main(int argc, char** argv)
 
     ch_opt_addsi(CH_OPTION_OPTIONAL,'d',"device-type","Adjust the behavior of pcap-modify to match the specified device [nexus3548 | fusion | triton | arista7150]", &options.device_type, "nexus3548");
 
+    ch_opt_addbi(CH_OPTION_FLAG,'c',"crc-recalc","Always recalculate the CRC of all input packets, regardless of whether a packet modification occurred", &options.force_crc_recalc, false);
+    ch_opt_addbi(CH_OPTION_FLAG,'s',"ip-csum-recalc","Always recalculate the IP checksum of all input packets, regardless of whether a packet modification occurred", &options.force_ip_csum_recalc, false);
+    ch_opt_addbi(CH_OPTION_FLAG,'u',"l4-csum-recalc","Always recalculate the L4 checksum of all input packets, regardless of whether a packet modification occurred", &options.force_ip_csum_recalc, false);
+
     ch_opt_parse(argc,argv);
 
     ch_log_settings.log_level = CH_LOG_LVL_INFO;
@@ -614,9 +621,9 @@ int main(int argc, char** argv)
     const int64_t vlan_bytes = !old_vlan_hdr.h_vlan_TCI && new_vlan_hdr.h_vlan_TCI ? VLAN_HLEN : 0;
     for(int pkt_num = 0; (!stop) && (pkt_num < options.offset + options.max) && offset < filesize; pkt_num++,
     timeprevns = timenowns ){
-        bool recalc_eth_crc = false;
-        bool recalc_ip_csum = false;
-        bool recalc_prot_csum = false;
+        bool recalc_eth_crc = options.force_crc_recalc;
+        bool recalc_ip_csum = options.force_ip_csum_recalc;
+        bool recalc_prot_csum = options.force_proto_csum_recalc;
         pkt_filter_t matched = {0};
         if(pkt_num && pkt_num % (1000 * 1000) == 0){
             ch_log_info("Loaded %li,000,000 packets\n", pkt_num/1000/1000);
