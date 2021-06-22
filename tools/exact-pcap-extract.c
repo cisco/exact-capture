@@ -588,18 +588,19 @@ int main (int argc, char** argv)
         wr_pkt_hdr.ts.ns.ts_sec  = secs;
         wr_pkt_hdr.ts.ns.ts_nsec = nsecs;
 
-        expcap_pktftr_t wr_pkt_ftr;
         /* Include the footer (if we want it) */
         if(format == EXTR_OPT_FORM_EXPCAP){
+            expcap_pktftr_t wr_pkt_ftr = {0};
             wr_pkt_ftr = *pkt_ftr;
             wr_pkt_ftr.ts_secs = secs;
             wr_pkt_ftr.ts_psecs = psecs;
+            buff_err = pcap_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
+        } else{
+            buff_err = pcap_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, NULL);
         }
 
         /* Copy the packet header, and upto snap len packet data bytes */
         ch_log_debug1("Copying %li bytes from buffer %li at index=%li into buffer at offset=%li\n", pcap_record_bytes, min_idx, rd_buffs[min_idx].pkt_idx, wr_buff.offset);
-
-        buff_err = pcap_buff_write(wr_buff, &wr_pkt_hdr, rd_buffs[min_idx].pkt, packet_copy_bytes, &wr_pkt_ftr);
 
         if(buff_err != BUFF_ENONE){
             ch_log_fatal("Failed to write packet data: %s\n", buff_strerror(buff_err));
