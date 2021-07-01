@@ -58,20 +58,8 @@ void print_flags(uint8_t flags)
 
 int parse_device_id(const char *str, int* dev_number)
 {
-    char* p;
-
-    p = strchr(str, ':');
-    if (p == NULL){
-        return -1;
-    }
-
-    if ((p - str) >= 16){
-        return -1;
-    }
-
-    *dev_number = strtol(p - 1, NULL, 10);
-
-    return 0;
+    int ret = sscanf(str, "exanic%d", dev_number);
+    return ret < 1;
 }
 
 
@@ -107,20 +95,15 @@ int parse_device (const char* interface,
 {
     if(!exanic_find_port_by_interface_name (interface, device, 16, port_number))
     {
-        parse_device_id(device, dev_number);
-        return 0;
+        return parse_device_id(device, dev_number);
     }
 
     if(!parse_device_port (interface, device, port_number))
     {
-        parse_device_id(device, dev_number);
-        return 0;
-
+        return parse_device_id(device, dev_number);
     }
 
     return 1;
-
-
 }
 
 
