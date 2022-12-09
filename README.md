@@ -6,7 +6,7 @@ The system is fully open source and designed for performance as well as ease of 
 It can be used with any ExaNIC network card, and is optimised for use with ExaDisk high speed flash drives. 
 The system can be deployed on any suitably powerful server system. 
 
-Full online documentation is available [here](https://code.exablaze.com/exact-capture/)
+Full online documentation is available [here](https://www.cisco.com/c/en/us/td/docs/dcn/nexus3550/exact-capture/sw/user-guide/exact-capture-user-guide/install.html)
 
 
 
